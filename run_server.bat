@@ -1,0 +1,3 @@
+@echo off
+echo Starting SOI Certificate Management Platform on http://localhost:8000 ...
+php -d extension_dir="C:\tools\php85\ext" -d extension=pdo_sqlite -d extension=pdo_mysql -d extension=zip -S localhost:8000 index.php

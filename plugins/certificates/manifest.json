@@ -1,0 +1,29 @@
+{
+  "id": "certificates",
+  "name": "SOI Certificate Management Platform",
+  "slug": "certificates",
+  "version": "1.0.0",
+  "schema_version": "2026100701",
+  "description": "Enterprise-grade, modular, multi-tenant certificate issuance, verification, and management platform for SOI CMS.",
+  "author": "School Of Interns Development Team",
+  "category": "Education & Enterprise Tools",
+  "min_php_version": "8.1.0",
+  "entry_point": "plugin.php",
+  "requires_database": true,
+  "supports_update_center": true,
+  "permissions": [
+    "platform.read",
+    "platform.manage",
+    "tenants.read",
+    "tenants.manage",
+    "templates.read",
+    "templates.create",
+    "templates.publish",
+    "certificates.read",
+    "certificates.issue",
+    "certificates.revoke",
+    "certificates.replace",
+    "verification.manage",
+    "audit.read"
+  ]
+}
