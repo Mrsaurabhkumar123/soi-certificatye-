@@ -22,10 +22,11 @@ class TenantContext
         $this->currentRole = $role;
     }
 
-    public function setTenant(Tenant $tenant, string $role = 'viewer'): void
+    public function setTenant(Tenant $tenant, string $role = 'viewer', ?int $userId = null): void
     {
         $this->currentTenant = $tenant;
         $this->currentRole = $role;
+        $this->currentUserId = $userId;
     }
 
     public function getTenant(): ?Tenant
@@ -44,6 +45,43 @@ class TenantContext
     public function getRole(): string
     {
         return $this->currentRole;
+    }
+
+    public function getCurrentUserId(): ?int
+    {
+        return $this->currentUserId;
+    }
+
+    public function clear(): void
+    {
+        $this->currentTenant = null;
+        $this->currentUserId = null;
+        $this->currentRole = 'viewer';
+    }
+
+    public function snapshot(): array
+    {
+        return [
+            'tenant' => $this->currentTenant,
+            'user_id' => $this->currentUserId,
+            'role' => $this->currentRole,
+        ];
+    }
+
+    public function restore(array $context): void
+    {
+        $tenant = $context['tenant'] ?? null;
+        $userId = $context['user_id'] ?? null;
+        $role = $context['role'] ?? null;
+        if (($tenant !== null && !$tenant instanceof Tenant)
+            || ($userId !== null && (!is_int($userId) || $userId < 1))
+            || !is_string($role)) {
+            throw new Exception('Invalid tenant context snapshot.');
+        }
+
+        $this->currentTenant = $tenant;
+        $this->currentUserId = $userId;
+        $this->currentRole = $role;
     }
 
     public function hasTenant(): bool

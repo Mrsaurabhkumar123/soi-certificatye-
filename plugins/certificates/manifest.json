@@ -3,7 +3,7 @@
   "name": "SOI Certificate Management Platform",
   "slug": "certificates",
   "version": "1.0.0",
-  "schema_version": "2026100701",
+  "schema_version": "2026100709",
   "description": "Enterprise-grade, modular, multi-tenant certificate issuance, verification, and management platform for SOI CMS.",
   "author": "School Of Interns Development Team",
   "category": "Education & Enterprise Tools",

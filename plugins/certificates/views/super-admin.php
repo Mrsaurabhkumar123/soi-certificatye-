@@ -6,14 +6,18 @@ $pageTitle = "Platform Super Admin - SOI Certificates";
 ob_start();
 ?>
 
-<div class="grid-3" style="margin-bottom: 2rem;">
+<div class="grid-4" style="margin-bottom: 2rem;">
   <div class="stat-box">
     <span class="stat-label">Active Tenants</span>
-    <span class="stat-value"><?= count($tenants) ?></span>
+    <span class="stat-value"><?= $activeTenantCount ?></span>
   </div>
   <div class="stat-box">
     <span class="stat-label">Total Certificates Issued</span>
     <span class="stat-value"><?= $totalCerts ?></span>
+  </div>
+  <div class="stat-box">
+    <span class="stat-label">Suspended Tenants</span>
+    <span class="stat-value"><?= $suspendedTenantCount ?></span>
   </div>
   <div class="stat-box">
     <span class="stat-label">Platform Health</span>

@@ -41,9 +41,11 @@ class Role
                 Permissions::AUDIT_READ,
                 Permissions::REPORTS_EXPORT,
                 Permissions::VERIFICATION_MANAGE,
+                Permissions::SETTINGS_MANAGE,
             ],
             self::TENANT_ADMIN => [
                 Permissions::TENANTS_READ,
+                Permissions::TENANTS_MANAGE,
                 Permissions::TEMPLATES_READ,
                 Permissions::TEMPLATES_CREATE,
                 Permissions::TEMPLATES_UPDATE,
@@ -61,6 +63,8 @@ class Role
                 Permissions::WEBHOOKS_MANAGE,
                 Permissions::AUDIT_READ,
                 Permissions::REPORTS_EXPORT,
+                Permissions::VERIFICATION_MANAGE,
+                Permissions::SETTINGS_MANAGE,
             ],
             self::TEMPLATE_DESIGNER => [
                 Permissions::TEMPLATES_READ,

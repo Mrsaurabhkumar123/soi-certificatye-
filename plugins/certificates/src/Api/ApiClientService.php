@@ -19,6 +19,24 @@ class ApiClientService
 
     public function createClient(int $tenantId, string $name, array $scopes = []): array
     {
+        $name = trim($name);
+        if ($tenantId < 1 || $name === '') {
+            throw new \InvalidArgumentException('API client tenant and name are required.');
+        }
+        $allowedScopes = [
+            'platform.read',
+            'templates.read',
+            'certificates.read',
+            'certificates.issue',
+            'certificates.revoke',
+        ];
+        if ($scopes === []) {
+            $scopes = ['certificates.issue', 'certificates.read'];
+        }
+        if (array_diff($scopes, $allowedScopes) !== []) {
+            throw new \InvalidArgumentException('The API client requested an unsupported scope.');
+        }
+
         $clientId = 'sk_' . bin2hex(random_bytes(12));
         $secret = 'sec_' . bin2hex(random_bytes(24));
         $secretHash = hash('sha256', $secret);
@@ -26,20 +44,20 @@ class ApiClientService
         $table = $this->db->tableName('cert_api_clients');
         $this->db->execute(
             "INSERT INTO {$table} (tenant_id, name, client_id, secret_hash, scopes_json, status, created_at)
-             VALUES (:tid, :name, :cid, :shash, :scopes, 'active', datetime('now'))",
+             VALUES (:tid, :name, :cid, :shash, :scopes, 'active', CURRENT_TIMESTAMP)",
             [
                 'tid' => $tenantId,
                 'name' => $name,
                 'cid' => $clientId,
                 'shash' => $secretHash,
-                'scopes' => json_encode($scopes ?: ['certificates.issue', 'certificates.read']),
+                'scopes' => json_encode(array_values(array_unique($scopes))),
             ]
         );
 
         return [
             'client_id' => $clientId,
             'secret' => $secret, // Revealed ONCE
-            'scopes' => $scopes,
+            'scopes' => array_values(array_unique($scopes)),
         ];
     }
 
@@ -54,7 +72,7 @@ class ApiClientService
 
         if ($client) {
             $this->db->execute(
-                "UPDATE {$table} SET last_used_at = datetime('now') WHERE id = :id",
+                "UPDATE {$table} SET last_used_at = CURRENT_TIMESTAMP WHERE id = :id",
                 ['id' => $client['id']]
             );
             $client['scopes'] = json_decode($client['scopes_json'] ?? '[]', true) ?: [];
@@ -62,5 +80,28 @@ class ApiClientService
         }
 
         return null;
+    }
+
+    public function listForTenant(int $tenantId): array
+    {
+        $table = $this->db->tableName('cert_api_clients');
+        return $this->db->fetchAll(
+            "SELECT id, name, client_id, scopes_json, status, created_at, last_used_at
+             FROM {$table} WHERE tenant_id = :tenant_id ORDER BY id DESC",
+            ['tenant_id' => $tenantId]
+        );
+    }
+
+    public function revoke(int $tenantId, int $clientId): bool
+    {
+        if ($tenantId < 1 || $clientId < 1) {
+            return false;
+        }
+        $table = $this->db->tableName('cert_api_clients');
+        return $this->db->execute(
+            "UPDATE {$table} SET status = 'revoked'
+             WHERE id = :id AND tenant_id = :tenant_id AND status = 'active'",
+            ['id' => $clientId, 'tenant_id' => $tenantId]
+        ) === 1;
     }
 }

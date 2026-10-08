@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace SOI\Certificates\Storage;
 
 use Exception;
+use RuntimeException;
 
 /**
  * Local filesystem storage implementation with directory traversal prevention.
@@ -14,32 +15,68 @@ class LocalStorageAdapter implements StorageAdapterInterface
 
     public function __construct(string $baseDir)
     {
-        $this->baseDir = rtrim($baseDir, '/\\');
-        if (!is_dir($this->baseDir)) {
-            mkdir($this->baseDir, 0755, true);
+        $baseDir = rtrim($baseDir, '/\\');
+        if ($baseDir === '') {
+            throw new RuntimeException('Storage base directory is required.');
+        }
+        if (!is_dir($baseDir)) {
+            if (!mkdir($baseDir, 0755, true) && !is_dir($baseDir)) {
+                throw new RuntimeException('Unable to initialize local storage.');
+            }
+        }
+        $realBase = realpath($baseDir);
+        if ($realBase === false || !is_dir($realBase)) {
+            throw new RuntimeException('Local storage directory cannot be resolved safely.');
+        }
+        $this->baseDir = rtrim($realBase, '/\\');
+        $this->protectDirectory($this->baseDir);
+        foreach (['certificates', 'certificate-assets'] as $directory) {
+            $this->ensureDirectory($this->baseDir . DIRECTORY_SEPARATOR . $directory);
         }
     }
 
     public function sanitizePath(string $relativePath): string
     {
-        $clean = str_replace(['..', '\\', "\0"], ['', '/', ''], $relativePath);
-        return ltrim($clean, '/');
+        if ($relativePath === '' || str_contains($relativePath, "\0") || str_contains($relativePath, '\\')
+            || str_starts_with($relativePath, '/') || preg_match('/^[A-Za-z]:/', $relativePath)) {
+            throw new Exception('Invalid storage path.');
+        }
+        $segments = explode('/', $relativePath);
+        foreach ($segments as $segment) {
+            if ($segment === '' || $segment === '.' || $segment === '..' || str_contains($segment, ':')) {
+                throw new Exception('Invalid storage path.');
+            }
+        }
+        return implode('/', $segments);
     }
 
     public function getAbsolutePath(string $relativePath): string
     {
         $clean = $this->sanitizePath($relativePath);
-        return $this->baseDir . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $clean);
+        $path = $this->baseDir . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $clean);
+        $this->assertContained($path);
+        return $path;
     }
 
     public function put(string $relativePath, string $content): bool
     {
         $fullPath = $this->getAbsolutePath($relativePath);
         $dir = dirname($fullPath);
-        if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
+        $this->ensureDirectory($dir);
+        $this->assertContained($fullPath);
+        $temporary = $fullPath . '.tmp-' . bin2hex(random_bytes(8));
+        $written = file_put_contents($temporary, $content, LOCK_EX);
+        if ($written === false || $written !== strlen($content)) {
+            if (file_exists($temporary)) {
+                unlink($temporary);
+            }
+            return false;
         }
-        return file_put_contents($fullPath, $content) !== false;
+        if (!rename($temporary, $fullPath)) {
+            unlink($temporary);
+            return false;
+        }
+        return true;
     }
 
     public function get(string $relativePath): ?string
@@ -82,5 +119,47 @@ class LocalStorageAdapter implements StorageAdapterInterface
             return 0;
         }
         return (int)filesize($fullPath);
+    }
+
+    private function ensureDirectory(string $directory): void
+    {
+        $directory = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $directory);
+        if (!is_dir($directory) && !mkdir($directory, 0755, true) && !is_dir($directory)) {
+            throw new RuntimeException('Unable to create a local storage directory.');
+        }
+        $this->assertContained($directory);
+        $this->protectDirectory($directory);
+    }
+
+    private function assertContained(string $path): void
+    {
+        $resolved = realpath($path);
+        if ($resolved === false) {
+            $parent = realpath(dirname($path));
+            if ($parent === false) {
+                return;
+            }
+            $resolved = $parent . DIRECTORY_SEPARATOR . basename($path);
+        }
+        $base = rtrim($this->baseDir, '/\\') . DIRECTORY_SEPARATOR;
+        if (strncasecmp($resolved, $base, strlen($base)) !== 0) {
+            throw new Exception('Storage path escapes the configured base directory.');
+        }
+    }
+
+    private function protectDirectory(string $directory): void
+    {
+        $htaccess = $directory . DIRECTORY_SEPARATOR . '.htaccess';
+        if (!file_exists($htaccess)) {
+            if (file_put_contents($htaccess, "Options -Indexes\nRequire all denied\n") === false) {
+                throw new RuntimeException('Unable to protect local storage from direct web access.');
+            }
+        }
+        $index = $directory . DIRECTORY_SEPARATOR . 'index.html';
+        if (!file_exists($index)) {
+            if (file_put_contents($index, '') === false) {
+                throw new RuntimeException('Unable to initialize local storage protection files.');
+            }
+        }
     }
 }

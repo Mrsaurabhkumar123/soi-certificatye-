@@ -110,9 +110,19 @@ class MigrationRunner
                 continue;
             }
 
-            // Apply table prefixing
+            // Prefix only table identifiers (not index names or column names).
             if (!empty($prefix)) {
-                $stmt = preg_replace('/\b(cert_[a-z0-9_]+)\b/i', $prefix . '$1', $stmt);
+                $stmt = preg_replace_callback(
+                    '/(\b(?:TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?|FROM\s+|JOIN\s+|INTO\s+|UPDATE\s+|REFERENCES\s+|ON\s+))((?:[A-Za-z_][A-Za-z0-9_]*\.)?)(cert_[A-Za-z0-9_]+)/i',
+                    static function (array $match) use ($prefix): string {
+                        $table = $match[3];
+                        if (str_starts_with($table, $prefix)) {
+                            return $match[0];
+                        }
+                        return $match[1] . $match[2] . $prefix . $table;
+                    },
+                    $stmt
+                );
             }
 
             if ($isSqlite) {

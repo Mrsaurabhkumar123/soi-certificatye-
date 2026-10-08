@@ -14,11 +14,17 @@ class TemplateService
 {
     protected Database $db;
     protected TenantContext $tenantContext;
+    protected TemplateRepository $repository;
+    protected DesignerJSONValidator $layoutValidator;
+    protected VariableValidator $variableValidator;
 
     public function __construct(Database $db, TenantContext $tenantContext)
     {
         $this->db = $db;
         $this->tenantContext = $tenantContext;
+        $this->repository = new TemplateRepository($db, $tenantContext);
+        $this->layoutValidator = new DesignerJSONValidator();
+        $this->variableValidator = new VariableValidator();
     }
 
     public function getTenantTemplates(): array
@@ -43,26 +49,27 @@ class TemplateService
         return array_map(fn($r) => new Template($r), $rows);
     }
 
+    public function getPublishedVariableSchema(int $templateId): array
+    {
+        $template = $this->findById($templateId);
+        if ($template === null || $template->status !== 'published' || $template->publishedVersionId === null) {
+            throw new \InvalidArgumentException('Select a published template from this tenant.');
+        }
+        $version = $this->findVersionById($template->publishedVersionId);
+        if ($version === null || $version->publishedAt === null) {
+            throw new \InvalidArgumentException('The selected template has no published version.');
+        }
+        return $this->variableValidator->validateSchema($version->variableSchema);
+    }
+
     public function findById(int $id): ?Template
     {
-        $tenantId = $this->tenantContext->getTenantId();
-        $table = $this->db->tableName('cert_templates');
-        $row = $this->db->fetchOne(
-            "SELECT * FROM {$table} WHERE id = :id AND tenant_id = :tid",
-            ['id' => $id, 'tid' => $tenantId]
-        );
-        return $row ? new Template($row) : null;
+        return $this->repository->findById($id);
     }
 
     public function findVersionById(int $versionId): ?TemplateVersion
     {
-        $tenantId = $this->tenantContext->getTenantId();
-        $table = $this->db->tableName('cert_template_versions');
-        $row = $this->db->fetchOne(
-            "SELECT * FROM {$table} WHERE id = :id AND tenant_id = :tid",
-            ['id' => $versionId, 'tid' => $tenantId]
-        );
-        return $row ? new TemplateVersion($row) : null;
+        return $this->repository->findVersionById($versionId);
     }
 
     public function createTemplate(string $slug, string $name, ?string $category = null): Template
@@ -72,7 +79,7 @@ class TemplateService
 
         $this->db->execute(
             "INSERT INTO {$table} (tenant_id, slug, name, category, status, created_at, updated_at)
-             VALUES (:tid, :slug, :name, :cat, 'draft', datetime('now'), datetime('now'))",
+             VALUES (:tid, :slug, :name, :cat, 'draft', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
             ['tid' => $tenantId, 'slug' => $slug, 'name' => $name, 'cat' => $category]
         );
         $id = $this->db->lastInsertId();
@@ -99,11 +106,11 @@ class TemplateService
         ];
 
         $vTable = $this->db->tableName('cert_template_versions');
-        $canon = hash('sha256', json_encode($defaultLayout));
+        $canon = TemplateRepository::canonicalHash($defaultLayout, $defaultVariables);
         $this->db->execute(
             "INSERT INTO {$vTable} 
             (template_id, tenant_id, version_number, page_format, layout_json, variable_schema_json, canonical_hash, created_at)
-            VALUES (:tid_fk, :tid, 1, 'A4_LANDSCAPE', :layout, :schema, :hash, datetime('now'))",
+            VALUES (:tid_fk, :tid, 1, 'A4_LANDSCAPE', :layout, :schema, :hash, CURRENT_TIMESTAMP)",
             [
                 'tid_fk' => $id,
                 'tid' => $tenantId,
@@ -122,47 +129,52 @@ class TemplateService
         return $this->findById($id);
     }
 
+    public function saveDraft(int $templateId, array $layout, array $variableSchema): TemplateVersion
+    {
+        $layout = $this->layoutValidator->validate($layout);
+        $variableSchema = $this->variableValidator->validateSchema($variableSchema);
+        $this->validateVariableReferences($layout, $variableSchema);
+        return $this->repository->saveDraft($templateId, $layout, $variableSchema);
+    }
+
     public function publish(int $templateId, ?int $userId = null): TemplateVersion
     {
         $template = $this->findById($templateId);
-        if (!$template || !$template->draftVersionId) {
-            throw new Exception("Template or draft version not found.");
+        if ($template === null || !$template->draftVersionId) {
+            throw new Exception('Template or draft version not found.');
         }
-
         $draft = $this->findVersionById($template->draftVersionId);
-        if (!$draft) {
-            throw new Exception("Draft version data missing.");
+        if ($draft === null) {
+            throw new Exception('Draft version data missing.');
         }
 
-        // Validate layout structure
-        if (empty($draft->layout['elements'])) {
-            throw new Exception("Template layout must contain elements.");
+        $this->layoutValidator->validate($draft->layout);
+        $this->variableValidator->validateSchema($draft->variableSchema);
+        $this->validateVariableReferences($draft->layout, $draft->variableSchema);
+        return $this->repository->publishDraft($templateId, $userId);
+    }
+
+    private function validateVariableReferences(array $layout, array $schema): void
+    {
+        $defined = array_fill_keys(array_column($schema, 'key'), true);
+        $system = ['certificate_number', 'verification_url', 'issue_date', 'recipient_name', 'recipient_email'];
+        $assets = $this->db->tableName('cert_template_assets');
+        $tenantId = $this->tenantContext->getTenantId();
+        foreach ($layout['elements'] as $element) {
+            if (($element['type'] ?? null) === 'variable'
+                && !isset($defined[$element['key']])
+                && !in_array($element['key'], $system, true)) {
+                throw new \InvalidArgumentException('A template element references an undefined variable.');
+            }
+            if (($element['type'] ?? null) === 'image') {
+                $asset = $this->db->fetchOne(
+                    "SELECT id FROM {$assets} WHERE id = :asset_id AND tenant_id = :tenant_id",
+                    ['asset_id' => $element['asset_id'], 'tenant_id' => $tenantId]
+                );
+                if ($asset === null) {
+                    throw new \InvalidArgumentException('Template image asset is missing or belongs to another tenant.');
+                }
+            }
         }
-
-        // Compute deterministic immutable canonical hash
-        $canonicalJson = json_encode([
-            'page' => $draft->layout['page'] ?? [],
-            'elements' => $draft->layout['elements'] ?? [],
-            'schema' => $draft->variableSchema,
-        ], JSON_UNESCAPED_SLASHES);
-        $canonicalHash = hash('sha256', $canonicalJson);
-
-        $vTable = $this->db->tableName('cert_template_versions');
-        $this->db->execute(
-            "UPDATE {$vTable} 
-             SET canonical_hash = :hash, published_at = datetime('now'), published_by = :uid 
-             WHERE id = :id",
-            ['hash' => $canonicalHash, 'uid' => $userId, 'id' => $draft->id]
-        );
-
-        $tTable = $this->db->tableName('cert_templates');
-        $this->db->execute(
-            "UPDATE {$tTable} 
-             SET status = 'published', published_version_id = :vid, updated_at = datetime('now') 
-             WHERE id = :id",
-            ['vid' => $draft->id, 'id' => $template->id]
-        );
-
-        return $this->findVersionById($draft->id);
     }
 }

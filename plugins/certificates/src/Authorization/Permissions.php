@@ -38,4 +38,5 @@ class Permissions
     public const AUDIT_READ = 'audit.read';
     public const REPORTS_EXPORT = 'reports.export';
     public const VERIFICATION_MANAGE = 'verification.manage';
+    public const SETTINGS_MANAGE = 'settings.manage';
 }

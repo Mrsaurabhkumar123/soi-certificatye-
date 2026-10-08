@@ -26,6 +26,9 @@ class Certificate
     public string $createdByType;
     public ?int $createdById;
     public string $sourceType;
+    public ?int $replacesCertificateId;
+    public ?int $replacedByCertificateId;
+    public ?string $sourceReference;
 
     public function __construct(array $data)
     {
@@ -49,6 +52,9 @@ class Certificate
         $this->createdByType = (string)($data['created_by_type'] ?? 'user');
         $this->createdById = isset($data['created_by_id']) ? (int)$data['created_by_id'] : null;
         $this->sourceType = (string)($data['source_type'] ?? 'manual');
+        $this->replacesCertificateId = isset($data['replaces_certificate_id']) ? (int)$data['replaces_certificate_id'] : null;
+        $this->replacedByCertificateId = isset($data['replaced_by_certificate_id']) ? (int)$data['replaced_by_certificate_id'] : null;
+        $this->sourceReference = isset($data['source_reference']) ? (string)$data['source_reference'] : null;
     }
 
     public function isIssued(): bool

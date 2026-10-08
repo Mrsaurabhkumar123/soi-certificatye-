@@ -25,6 +25,10 @@ declare(strict_types=1);
       <?php elseif ($result->status === 'expired'): ?>
         <div class="verify-badge-icon" style="background-color: #fef3c7; color: #92400e; font-size: 28px;">!</div>
         <h1 style="font-size: 1.4rem; color: #92400e; margin-bottom: 0.25rem;">Certificate Expired</h1>
+      <?php elseif ($result->requiresPin): ?>
+        <h1 style="font-size: 1.4rem; color: #64748b; margin-bottom: 0.25rem;">Verification PIN Required</h1>
+      <?php elseif ($result->requiresAuthentication): ?>
+        <h1 style="font-size: 1.4rem; color: #64748b; margin-bottom: 0.25rem;">Sign-in Required</h1>
       <?php else: ?>
         <div class="verify-badge-icon" style="background-color: #f1f5f9; color: #64748b; font-size: 28px;">?</div>
         <h1 style="font-size: 1.4rem; color: #64748b; margin-bottom: 0.25rem;">Record Not Found</h1>
@@ -36,6 +40,14 @@ declare(strict_types=1);
     </div>
 
     <div class="verify-body">
+      <?php if ($result->requiresPin): ?>
+        <form method="POST" action="<?= htmlspecialchars($this->plugin->router->url('/verify/' . rawurlencode($verificationToken))) ?>">
+          <?= \SOI\Certificates\Core\Session::csrfField() ?>
+          <label class="verify-label" for="verification_pin">Verification PIN</label>
+          <input id="verification_pin" name="pin" type="password" inputmode="numeric" minlength="6" maxlength="12" autocomplete="one-time-code" required>
+          <button type="submit">Verify</button>
+        </form>
+      <?php endif; ?>
       <?php if ($result->found && $result->status !== 'disabled'): ?>
         <div class="verify-row">
           <span class="verify-label">Certificate Number</span>
@@ -53,6 +65,12 @@ declare(strict_types=1);
           <span class="verify-label">Issued On</span>
           <span class="verify-val"><?= htmlspecialchars(date('F j, Y', strtotime($result->issueDate))) ?></span>
         </div>
+        <?php if ($result->expiresAt !== null): ?>
+          <div class="verify-row">
+            <span class="verify-label">Expires On</span>
+            <span class="verify-val"><?= htmlspecialchars(date('F j, Y', strtotime($result->expiresAt))) ?></span>
+          </div>
+        <?php endif; ?>
         <div class="verify-row">
           <span class="verify-label">Registry Status</span>
           <span class="verify-val">

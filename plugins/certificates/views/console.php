@@ -6,6 +6,20 @@ $pageTitle = "Operations Console - Certificate Issuance";
 ob_start();
 ?>
 
+<section class="grid-4" aria-label="Issuance analytics">
+  <?php foreach ([
+      'Certificates issued' => $dashboardMetrics['issued_total'],
+      'Issued in last 30 days' => $dashboardMetrics['issued_30d'],
+      'Currently valid' => $dashboardMetrics['active'],
+      'Failures in last 30 days' => $dashboardMetrics['failures_30d'],
+  ] as $metricLabel => $metricValue): ?>
+    <article class="card stat-card">
+      <h2 class="card-title"><?= htmlspecialchars($metricLabel, ENT_QUOTES, 'UTF-8') ?></h2>
+      <p class="stat-value"><?= (int)$metricValue ?></p>
+    </article>
+  <?php endforeach; ?>
+</section>
+
 <div class="grid-2">
   <!-- Issuance Form -->
   <div class="card">
@@ -75,12 +89,67 @@ ob_start();
   </div>
 </div>
 
+<?php if ($recentFailures !== []): ?>
+  <section class="card" aria-labelledby="recent-failures-heading">
+    <div class="card-header"><h2 class="card-title" id="recent-failures-heading">Recent Failure Log</h2></div>
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead><tr><th>Event</th><th>Target</th><th>Time</th></tr></thead>
+        <tbody>
+          <?php foreach ($recentFailures as $failure): ?>
+            <tr>
+              <td><?= htmlspecialchars($failure['event_key'], ENT_QUOTES, 'UTF-8') ?></td>
+              <td><?= htmlspecialchars($failure['target_type'] . ' #' . $failure['target_id'], ENT_QUOTES, 'UTF-8') ?></td>
+              <td><?= htmlspecialchars($failure['created_at'], ENT_QUOTES, 'UTF-8') ?></td>
+            </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+  </section>
+<?php endif; ?>
+
 <!-- Certificate Registry -->
 <div class="card">
   <div class="card-header">
     <h2 class="card-title">Authoritative Certificate Registry</h2>
     <span style="font-size: 0.85rem; color: var(--text-muted);"><?= count($certificates) ?> record(s)</span>
   </div>
+
+  <form method="GET" action="<?= htmlspecialchars($this->plugin->router->url('/console')) ?>" class="grid-3" role="search">
+    <div class="form-group">
+      <label class="form-label" for="filter_number">Certificate number</label>
+      <input id="filter_number" name="certificate_number" class="form-control" maxlength="64" value="<?= htmlspecialchars($filters['certificate_number']) ?>">
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="filter_recipient">Recipient</label>
+      <input id="filter_recipient" name="recipient" class="form-control" maxlength="128" value="<?= htmlspecialchars($filters['recipient']) ?>">
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="filter_status">Status</label>
+      <select id="filter_status" name="status" class="form-control">
+        <option value="">All statuses</option>
+        <?php foreach (['issued', 'revoked', 'replaced', 'expired', 'cancelled'] as $statusOption): ?>
+          <option value="<?= htmlspecialchars($statusOption) ?>" <?= $filters['status'] === $statusOption ? 'selected' : '' ?>><?= htmlspecialchars(ucfirst($statusOption)) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="filter_from">Issued from</label>
+      <input id="filter_from" name="from" type="date" class="form-control" value="<?= htmlspecialchars($filters['from']) ?>">
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="filter_to">Issued through</label>
+      <input id="filter_to" name="to" type="date" class="form-control" value="<?= htmlspecialchars($filters['to']) ?>">
+    </div>
+    <div class="form-group" style="align-self:end;display:flex;gap:.5rem">
+      <button type="submit" class="btn btn-primary btn-sm">Apply filters</button>
+      <a class="btn btn-secondary btn-sm" href="<?= htmlspecialchars($this->plugin->router->url('/console')) ?>">Clear</a>
+      <?php if ($canExport): ?>
+        <a class="btn btn-outline btn-sm" href="<?= htmlspecialchars($this->plugin->router->url('/manage/reports/certificates.csv') . '?' . http_build_query($filters)) ?>">Export CSV</a>
+      <?php endif; ?>
+    </div>
+  </form>
 
   <div class="table-responsive">
     <table class="data-table">
@@ -115,19 +184,45 @@ ob_start();
               </td>
               <td><?= htmlspecialchars(date('M j, Y', strtotime($cert->issuedAt))) ?></td>
               <td style="display: flex; gap: 0.5rem; align-items: center;">
+                <a class="btn btn-outline btn-sm" href="<?= htmlspecialchars($this->plugin->router->url('/console/certificates/' . $cert->id)) ?>">Details</a>
                 <a href="<?= htmlspecialchars($this->plugin->router->url('/console/certificates/' . $cert->id . '/download')) ?>" 
                    class="btn btn-outline btn-sm" target="_blank">
                   Download PDF
                 </a>
-                <a href="<?= htmlspecialchars($this->plugin->router->url('/verify/' . $cert->verificationToken)) ?>" 
-                   class="btn btn-outline btn-sm" target="_blank">
-                  Verify
-                </a>
+                <?php if ($cert->verificationToken !== ''): ?>
+                  <a href="<?= htmlspecialchars($this->plugin->router->url('/verify/' . rawurlencode($cert->verificationToken))) ?>"
+                     class="btn btn-outline btn-sm" target="_blank">Verify</a>
+                <?php else: ?>
+                  <span class="btn btn-outline btn-sm" aria-label="Scan the PDF verification QR code">Scan PDF QR</span>
+                <?php endif; ?>
                 <?php if ($cert->status === 'issued'): ?>
                   <form method="POST" action="<?= htmlspecialchars($this->plugin->router->url('/console/certificates/' . $cert->id . '/revoke')) ?>" style="display:inline;" onsubmit="return confirm('Are you sure you want to revoke this certificate?');">
                     <?= Session::csrfField() ?>
+                    <label class="form-label" for="revoke_reason_<?= $cert->id ?>">Revocation reason</label>
+                    <input id="revoke_reason_<?= $cert->id ?>" name="reason" class="form-control" maxlength="1000" required>
                     <button type="submit" class="btn btn-danger btn-sm">Revoke</button>
                   </form>
+                  <?php if ($this->plugin->authorizer->can(\SOI\Certificates\Authorization\Permissions::CERTIFICATES_REPLACE)): ?>
+                    <details>
+                      <summary class="btn btn-outline btn-sm">Replace</summary>
+                      <form method="POST" action="<?= htmlspecialchars($this->plugin->router->url('/console/certificates/' . $cert->id . '/replace')) ?>">
+                        <?= Session::csrfField() ?>
+                        <div class="form-group">
+                          <label class="form-label" for="replacement_name_<?= $cert->id ?>">Corrected recipient name</label>
+                          <input id="replacement_name_<?= $cert->id ?>" name="recipient_name" class="form-control" maxlength="128" required>
+                        </div>
+                        <div class="form-group">
+                          <label class="form-label" for="replacement_email_<?= $cert->id ?>">Corrected recipient email</label>
+                          <input id="replacement_email_<?= $cert->id ?>" name="recipient_email" type="email" class="form-control" maxlength="128">
+                        </div>
+                        <div class="form-group">
+                          <label class="form-label" for="replacement_reason_<?= $cert->id ?>">Replacement reason</label>
+                          <input id="replacement_reason_<?= $cert->id ?>" name="reason" class="form-control" maxlength="1000" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm">Issue replacement</button>
+                      </form>
+                    </details>
+                  <?php endif; ?>
                 <?php endif; ?>
               </td>
             </tr>

@@ -35,7 +35,7 @@ class AuditService
         $this->db->execute(
             "INSERT INTO {$table} 
             (tenant_id, actor_type, actor_id, event_key, target_type, target_id, request_id, source_ip, metadata_json, created_at)
-            VALUES (:tid, :atype, :aid, :event, :ttype, :tid_val, :req, :ip, :meta, datetime('now'))",
+            VALUES (:tid, :atype, :aid, :event, :ttype, :tid_val, :req, :ip, :meta, CURRENT_TIMESTAMP)",
             [
                 'tid' => $tenantId,
                 'atype' => $actorType,

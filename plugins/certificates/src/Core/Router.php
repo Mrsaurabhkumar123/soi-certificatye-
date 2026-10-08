@@ -58,7 +58,8 @@ class Router
         }
 
         // Normalize base path removal if running in subfolder
-        if (!empty($this->basePath) && str_starts_with($uri, $this->basePath)) {
+        if (!empty($this->basePath)
+            && ($uri === $this->basePath || str_starts_with($uri, $this->basePath . '/'))) {
             $uri = substr($uri, strlen($this->basePath));
         }
 
@@ -86,24 +87,36 @@ class Router
             if (preg_match($regex, $uri, $matches)) {
                 $params = array_filter($matches, 'is_string', ARRAY_FILTER_USE_KEY);
 
-                // Execute middleware
+                $cleanup = [];
                 foreach ($route['middleware'] as $mw) {
                     if (is_callable($mw)) {
                         $res = $mw();
                         if ($res === false) {
+                            foreach (array_reverse($cleanup) as $callback) {
+                                $callback();
+                            }
                             return null;
+                        }
+                        if (is_callable($res)) {
+                            $cleanup[] = $res;
                         }
                     }
                 }
 
-                $handler = $route['handler'];
-                if (is_array($handler)) {
-                    [$class, $action] = $handler;
-                    $controller = is_object($class) ? $class : new $class();
-                    return call_user_func_array([$controller, $action], [$params]);
-                }
+                try {
+                    $handler = $route['handler'];
+                    if (is_array($handler)) {
+                        [$class, $action] = $handler;
+                        $controller = is_object($class) ? $class : new $class();
+                        return call_user_func_array([$controller, $action], [$params]);
+                    }
 
-                return call_user_func_array($handler, [$params]);
+                    return call_user_func_array($handler, [$params]);
+                } finally {
+                    foreach (array_reverse($cleanup) as $callback) {
+                        $callback();
+                    }
+                }
             }
         }
 

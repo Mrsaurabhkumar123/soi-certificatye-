@@ -15,4 +15,6 @@ class VerificationResult
     public ?string $revocationReason = null;
     public string $message = '';
     public array $publicFields = [];
+    public bool $requiresPin = false;
+    public bool $requiresAuthentication = false;
 }

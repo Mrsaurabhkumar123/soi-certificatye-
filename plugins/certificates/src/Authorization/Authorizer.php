@@ -13,6 +13,7 @@ class Authorizer
 {
     protected TenantContext $tenantContext;
     protected bool $isPlatformAdmin = false;
+    protected ?array $apiScopes = null;
 
     public function __construct(TenantContext $tenantContext, bool $isPlatformAdmin = false)
     {
@@ -27,7 +28,11 @@ class Authorizer
 
     public function can(string $permission): bool
     {
-        // 1. Explicit platform admin bypass
+        if ($this->apiScopes !== null) {
+            return $this->tenantContext->hasTenant()
+                && in_array($permission, $this->apiScopes, true);
+        }
+
         if ($this->isPlatformAdmin) {
             return true;
         }
@@ -44,13 +49,15 @@ class Authorizer
         return in_array($permission, $allowed, true);
     }
 
+    public function setApiScopes(?array $scopes): void
+    {
+        $this->apiScopes = $scopes;
+    }
+
     public function require(string $permission): void
     {
         if (!$this->can($permission)) {
-            http_response_code(403);
-            header('Content-Type: text/plain; charset=utf-8');
-            echo "403 Forbidden: Insufficient permissions for [{$permission}].";
-            exit;
+            throw new \RuntimeException('Permission denied: ' . $permission);
         }
     }
 }

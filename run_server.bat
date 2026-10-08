@@ -1,3 +1,5 @@
 @echo off
 echo Starting SOI Certificate Management Platform on http://localhost:8000 ...
-php -d extension_dir="C:\tools\php85\ext" -d extension=pdo_sqlite -d extension=pdo_mysql -d extension=zip -S localhost:8000 index.php
+set SOI_CERT_ENV=development
+set SOI_CERT_STANDALONE_DEMO=1
+"C:\xampp\php\php.exe" -S localhost:8000 index.php

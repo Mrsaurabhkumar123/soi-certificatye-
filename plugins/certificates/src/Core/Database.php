@@ -5,6 +5,7 @@ namespace SOI\Certificates\Core;
 
 use PDO;
 use PDOException;
+use InvalidArgumentException;
 
 /**
  * Enterprise database adapter with prefix safety, prepared statements,
@@ -18,6 +19,9 @@ class Database
 
     public function __construct(?PDO $pdo = null, string $prefix = '')
     {
+        if ($prefix !== '' && !preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $prefix)) {
+            throw new InvalidArgumentException('Database table prefix must be a valid SQL identifier prefix.');
+        }
         $this->prefix = $prefix;
         if ($pdo !== null) {
             $this->pdo = $pdo;
@@ -80,35 +84,39 @@ class Database
 
     public function tableName(string $baseTable): string
     {
+        if (!preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $baseTable)) {
+            throw new InvalidArgumentException('Database table name must be a valid SQL identifier.');
+        }
+
+        if ($this->prefix !== '' && str_starts_with($baseTable, $this->prefix)) {
+            return $baseTable;
+        }
+
         return $this->prefix . $baseTable;
     }
 
     public function execute(string $sql, array $params = []): int
     {
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($params);
+        $stmt = $this->prepareAndExecute($sql, $params);
         return $stmt->rowCount();
     }
 
     public function fetchAll(string $sql, array $params = []): array
     {
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($params);
+        $stmt = $this->prepareAndExecute($sql, $params);
         return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
     public function fetchOne(string $sql, array $params = []): ?array
     {
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($params);
+        $stmt = $this->prepareAndExecute($sql, $params);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return $row !== false ? $row : null;
     }
 
     public function fetchValue(string $sql, array $params = []): mixed
     {
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($params);
+        $stmt = $this->prepareAndExecute($sql, $params);
         return $stmt->fetchColumn();
     }
 
@@ -136,5 +144,23 @@ class Database
         if ($this->pdo->inTransaction()) {
             $this->pdo->rollBack();
         }
+    }
+
+    private function prepareAndExecute(string $sql, array $params): \PDOStatement
+    {
+        $stmt = $this->pdo->prepare($sql);
+        foreach ($params as $key => $value) {
+            $parameter = is_int($key) ? $key + 1 : ':' . ltrim((string)$key, ':');
+            $type = match (true) {
+                $value === null => PDO::PARAM_NULL,
+                is_bool($value) => PDO::PARAM_BOOL,
+                is_int($value) => PDO::PARAM_INT,
+                is_resource($value) => PDO::PARAM_LOB,
+                default => PDO::PARAM_STR,
+            };
+            $stmt->bindValue($parameter, $value, $type);
+        }
+        $stmt->execute();
+        return $stmt;
     }
 }

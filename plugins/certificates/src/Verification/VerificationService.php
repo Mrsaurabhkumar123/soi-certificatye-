@@ -5,33 +5,21 @@ namespace SOI\Certificates\Verification;
 
 use SOI\Certificates\Core\Database;
 
-class VerificationResult
-{
-    public bool $found = false;
-    public string $status = 'not_found'; // 'valid', 'revoked', 'expired', 'replaced', 'disabled', 'not_found'
-    public ?string $certificateNumber = null;
-    public ?string $recipientName = null;
-    public ?string $organizationName = null;
-    public ?string $issueDate = null;
-    public ?string $expiresAt = null;
-    public ?string $revocationReason = null;
-    public string $message = '';
-    public array $publicFields = [];
-}
-
 /**
  * Authoritative verification service resolving tokens to tamper-proof registry state.
  */
 class VerificationService
 {
     protected Database $db;
+    protected VerificationPolicy $policy;
 
-    public function __construct(Database $db)
+    public function __construct(Database $db, ?VerificationPolicy $policy = null)
     {
         $this->db = $db;
+        $this->policy = $policy ?? new VerificationPolicy($db);
     }
 
-    public function verify(string $token, ?string $pin = null): VerificationResult
+    public function verify(string $token, ?string $pin = null, bool $authenticated = false): VerificationResult
     {
         $result = new VerificationResult();
         $token = trim($token);
@@ -57,13 +45,6 @@ class VerificationService
             return $result;
         }
 
-        $result->found = true;
-        $result->certificateNumber = (string)$row['certificate_number'];
-        $result->organizationName = (string)$row['tenant_name'];
-        $result->recipientName = (string)$row['recipient_name'];
-        $result->issueDate = (string)$row['issued_at'];
-        $result->expiresAt = $row['expires_at'];
-
         // Evaluate status
         if ($row['tenant_status'] === 'suspended') {
             $result->status = 'disabled';
@@ -71,10 +52,50 @@ class VerificationService
             return $result;
         }
 
+        $tenantId = (int)$row['tenant_id'];
+        $policy = $this->policy->getForTenant($tenantId);
+        if ($policy['mode'] === 'disabled') {
+            $result->status = 'disabled';
+            $result->message = 'Verification is currently unavailable.';
+            return $result;
+        }
+        if ($policy['mode'] === 'pin' && ($pin === null || $pin === '')) {
+            $result->requiresPin = true;
+            $result->message = 'Enter the verification PIN to continue.';
+            return $result;
+        }
+        if ($policy['mode'] === 'authenticated' && !$authenticated) {
+            $result->requiresAuthentication = true;
+            $result->message = 'Sign in to view this verification record.';
+            return $result;
+        }
+        if (!$this->policy->allows($tenantId, $pin, $authenticated)) {
+            $result->message = 'This verification request could not be completed.';
+            return $result;
+        }
+
+        $result->found = true;
+        $result->certificateNumber = (string)$row['certificate_number'];
+        $result->organizationName = (string)$row['tenant_name'];
+        $result->recipientName = (string)$row['recipient_name'];
+        $result->issueDate = (string)$row['issued_at'];
+        $result->expiresAt = $row['expires_at'];
+
         $certStatus = strtolower($row['status']);
         if ($certStatus === 'revoked') {
             $result->status = 'revoked';
+            $result->revocationReason = $row['revocation_reason'] ?? null;
             $result->message = "NOTICE: This certificate has been revoked by the issuing authority.";
+            return $result;
+        }
+        if ($certStatus === 'replaced') {
+            $result->status = 'replaced';
+            $result->message = 'NOTICE: This certificate has been replaced.';
+            return $result;
+        }
+        if (!in_array($certStatus, ['issued', 'valid'], true)) {
+            $result->status = 'disabled';
+            $result->message = 'This certificate is not currently valid.';
             return $result;
         }
 
@@ -86,6 +107,9 @@ class VerificationService
 
         $result->status = 'valid';
         $result->message = "Verified Authentic: This certificate is valid and recorded in the official registry.";
+        if ($policy['mode'] === 'masked') {
+            $result->recipientName = self::maskName($result->recipientName);
+        }
         $result->publicFields = [
             'Certificate Number' => $result->certificateNumber,
             'Recipient Name' => $result->recipientName,
@@ -94,5 +118,19 @@ class VerificationService
         ];
 
         return $result;
+    }
+
+    private static function maskName(string $name): string
+    {
+        $parts = preg_split('/\s+/u', trim($name), -1, PREG_SPLIT_NO_EMPTY);
+        if (!$parts) {
+            return '***';
+        }
+        return implode(' ', array_map(static function (string $part): string {
+            if (function_exists('mb_substr') && function_exists('mb_strlen')) {
+                return mb_substr($part, 0, 1) . str_repeat('*', max(2, mb_strlen($part) - 1));
+            }
+            return substr($part, 0, 1) . str_repeat('*', max(2, strlen($part) - 1));
+        }, $parts));
     }
 }

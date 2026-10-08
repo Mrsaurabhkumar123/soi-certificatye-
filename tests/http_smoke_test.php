@@ -9,6 +9,9 @@ declare(strict_types=1);
 if (session_status() === PHP_SESSION_NONE) {
     @session_start();
 }
+putenv('SOI_CERT_ENV=development');
+putenv('SOI_CERT_STANDALONE_DEMO=1');
+ob_start();
 
 $baseDir = dirname(__DIR__) . '/plugins/certificates';
 require_once $baseDir . '/src/Core/Autoloader.php';
@@ -36,6 +39,12 @@ function assertHttp(string $name, bool $condition, string $detail = '') {
 }
 
 // 1. Test /api/v1/health
+$apiCredentials = $plugin->apiClientService->createClient(1, 'Smoke Test Client', [
+    'platform.read',
+    'templates.read',
+]);
+$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . $apiCredentials['secret'];
+$_SERVER['HTTP_IDEMPOTENCY_KEY'] = 'smoke-api-issuance-2026-10-07';
 ob_start();
 $router->dispatch('GET', '/api/v1/health');
 $output = ob_get_clean();
@@ -48,6 +57,8 @@ $router->dispatch('GET', '/api/v1/templates');
 $output = ob_get_clean();
 $json = json_decode($output, true);
 assertHttp("GET /api/v1/templates returns template array", isset($json['data']) && is_array($json['data']));
+unset($_SERVER['HTTP_AUTHORIZATION']);
+unset($_SERVER['HTTP_IDEMPOTENCY_KEY']);
 
 // 3. Test programmatic issuance
 $cmd = new \SOI\Certificates\Issuance\IssuanceCommand(
@@ -60,6 +71,12 @@ $cmd = new \SOI\Certificates\Issuance\IssuanceCommand(
 $apiCert = $plugin->issuanceService->issue($cmd, 1);
 assertHttp("Issuance produces valid certificate via unified engine", $apiCert->isIssued() && !empty($apiCert->verificationToken));
 
+ob_start();
+$router->dispatch('GET', '/console/certificates/' . $apiCert->id . '/download');
+$downloadedPdf = ob_get_clean();
+assertHttp("GET /console/certificates/{id}/download serves an integrity-verified PDF",
+    str_starts_with($downloadedPdf, '%PDF-') && hash('sha256', $downloadedPdf) === $apiCert->fileSha256);
+
 // 4. Test /verify/{token}
 ob_start();
 $router->dispatch('GET', '/verify/' . $apiCert->verificationToken);
@@ -70,13 +87,94 @@ assertHttp("GET /verify/{token} renders authentic badge and recipient", str_cont
 ob_start();
 $router->dispatch('GET', '/console');
 $output = ob_get_clean();
-assertHttp("GET /console renders operator shell", str_contains($output, 'Operations Console') && str_contains($output, 'Issue New Certificate'));
+assertHttp("GET /console renders issuance and lifecycle controls", str_contains($output, 'Operations Console')
+    && str_contains($output, 'Issue New Certificate') && str_contains($output, '/replace')
+    && str_contains($output, 'filter_number')
+    && str_contains($output, 'Revocation reason')
+    && str_contains($output, 'Issued in last 30 days')
+    && str_contains($output, 'Failures in last 30 days'));
+
+http_response_code(200);
+ob_start();
+$router->dispatch('GET', '/console/certificates/' . $apiCert->id);
+$certificateDetail = ob_get_clean();
+assertHttp("GET /console/certificates/{id} renders tenant-safe lifecycle detail",
+    str_contains($certificateDetail, $apiCert->certificateNumber) && str_contains($certificateDetail, 'Lifecycle timeline'));
+http_response_code(200);
+ob_start();
+$router->dispatch('GET', '/manage/reports/certificates.csv?recipient=Dr.%20Robert');
+$registryCsv = ob_get_clean();
+assertHttp("GET /manage/reports/certificates.csv exports filtered registry data",
+    str_contains($registryCsv, 'Certificate Number') && str_contains($registryCsv, 'Dr. Robert Miller'));
 
 // 6. Test /manage
 ob_start();
 $router->dispatch('GET', '/manage');
 $output = ob_get_clean();
-assertHttp("GET /manage renders tenant administration shell", str_contains($output, 'Certificate Templates') && str_contains($output, 'Recent Audit Trail'));
+assertHttp("GET /manage renders tenant administration and membership controls", str_contains($output, 'Certificate Templates')
+    && str_contains($output, 'Recent Audit Trail') && str_contains($output, 'Tenant Members')
+    && str_contains($output, '/manage/members/add') && str_contains($output, 'Form Approval Queue')
+    && str_contains($output, 'Scheduled Issuance') && str_contains($output, '/manage/schedules/create')
+    && str_contains($output, 'Pending form approvals')
+    && str_contains($output, 'paste CSV/TSV data')
+    && str_contains($output, 'Public form fields')
+    && str_contains($output, '/assets/js/form-builder.js'));
+
+http_response_code(200);
+ob_start();
+$router->dispatch('GET', '/manage/templates/1/designer');
+$designerHtml = ob_get_clean();
+assertHttp("GET /manage/templates/{id}/designer renders the editor and interaction controls",
+    str_contains($designerHtml, 'id="canvas"')
+    && str_contains($designerHtml, 'id="bring-forward"')
+    && str_contains($designerHtml, '/assets/js/designer-canvas.js'));
+
+$publicFormKey = 'smoke-public-form-' . bin2hex(random_bytes(4));
+$publicFormId = $plugin->dynamicFormService->createForm(
+    $plugin->tenantContext->getTenantId(),
+    $publicFormKey,
+    'Smoke Public Application',
+    1,
+    ['recipient_name' => 'recipient_name', 'recipient_email' => 'recipient_email', 'course_name' => 'course_name'],
+    false,
+    [
+        ['name' => 'recipient_name', 'label' => 'Recipient name', 'type' => 'text', 'required' => true],
+        ['name' => 'recipient_email', 'label' => 'Email', 'type' => 'email', 'required' => false],
+        ['name' => 'course_name', 'label' => 'Course', 'type' => 'text', 'required' => true],
+    ],
+    'immediate'
+);
+ob_start();
+$router->dispatch('GET', '/forms/' . $publicFormKey);
+$publicFormHtml = ob_get_clean();
+assertHttp("GET /forms/{form_key} renders a configured public application form",
+    str_contains($publicFormHtml, 'Smoke Public Application') && str_contains($publicFormHtml, 'recipient_name'));
+
+$_POST = [
+    '_csrf_token' => \SOI\Certificates\Core\Session::getCsrfToken(),
+    'fields' => [
+        'recipient_name' => 'Public Form Recipient',
+        'recipient_email' => 'public@example.test',
+        'course_name' => 'Public Program',
+    ],
+];
+$_SERVER['REMOTE_ADDR'] = '192.0.2.123';
+http_response_code(200);
+ob_start();
+$router->dispatch('POST', '/forms/' . $publicFormKey);
+$publicFormResponse = ob_get_clean();
+assertHttp("POST /forms/{form_key} issues immediately only under the configured tenant form policy",
+    http_response_code() === 201 && str_contains($publicFormResponse, 'Certificate issued'));
+unset($_POST['_csrf_token'], $_POST['fields']);
+
+$_POST['_csrf_token'] = \SOI\Certificates\Core\Session::getCsrfToken();
+ob_start();
+$router->dispatch('POST', '/scheduler/run');
+$output = ob_get_clean();
+$runnerResult = json_decode($output, true);
+assertHttp("POST /scheduler/run is reachable through authorized CSRF-protected web control",
+    isset($runnerResult['data']['queued'], $runnerResult['data']['leased']));
+unset($_POST['_csrf_token']);
 
 // 7. Test /super-admin
 ob_start();
@@ -88,7 +186,11 @@ assertHttp("GET /super-admin renders platform control shell", str_contains($outp
 ob_start();
 $router->dispatch('GET', '/docs');
 $output = ob_get_clean();
-assertHttp("GET /docs renders developer documentation", str_contains($output, 'SOI Certificate Platform Documentation') && str_contains($output, '/api/v1/certificates'));
+assertHttp("GET /docs renders developer documentation",
+    str_contains($output, 'SOI Certificate Platform Documentation')
+    && str_contains($output, '/api/v1/certificates')
+    && str_contains($output, 'Response and Error Codes')
+    && str_contains($output, 'IDEMPOTENCY_REQUIRED'));
 
 
 
@@ -97,4 +199,5 @@ echo "\n--------------------------------------------------------\n";
 echo "Smoke Results: {$passed} Passed, {$failed} Failed.\n";
 echo "--------------------------------------------------------\n";
 
+ob_end_flush();
 exit($failed === 0 ? 0 : 1);
