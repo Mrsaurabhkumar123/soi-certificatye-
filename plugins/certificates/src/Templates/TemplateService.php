@@ -38,6 +38,36 @@ class TemplateService
         return array_map(fn($r) => new Template($r), $rows);
     }
 
+    public function searchTemplates(array $filters = []): array
+    {
+        return $this->repository->search($filters);
+    }
+
+    public function getRecentTemplates(int $limit = 6): array
+    {
+        return $this->repository->search(['limit' => $limit]);
+    }
+
+    public function getCategories(): array
+    {
+        return $this->repository->getCategories();
+    }
+
+    public function cloneTemplate(int $templateId, string $newSlug, string $newName, ?string $category = null): Template
+    {
+        return $this->repository->cloneTemplate($templateId, $newSlug, $newName, $category);
+    }
+
+    public function archiveTemplate(int $templateId): bool
+    {
+        return $this->repository->archive($templateId);
+    }
+
+    public function supersedeTemplate(int $templateId): bool
+    {
+        return $this->repository->supersede($templateId);
+    }
+
     public function getPublishedTemplates(): array
     {
         $tenantId = $this->tenantContext->getTenantId();

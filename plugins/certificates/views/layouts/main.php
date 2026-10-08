@@ -19,14 +19,31 @@ $themeCss = ($tenant && isset($this->plugin->themeManager))
     <style><?= $themeCss ?></style>
   <?php endif; ?>
 </head>
-<body>
+<body class="has-sidebar">
 
-<?php require __DIR__ . '/../partials/navbar.php'; ?>
+<div class="app-layout">
+  <?php require __DIR__ . '/../partials/sidebar.php'; ?>
+  
+  <div class="app-main-wrapper">
+    <?php require __DIR__ . '/../partials/topbar.php'; ?>
+    
+    <main class="main-content" id="main-content">
+      <?php require __DIR__ . '/../partials/flash.php'; ?>
+      <?= $content ?? '' ?>
+    </main>
+  </div>
+</div>
 
-<main class="main-content" id="main-content">
-  <?php require __DIR__ . '/../partials/flash.php'; ?>
-  <?= $content ?? '' ?>
-</main>
-
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var toggle = document.getElementById('sidebar-toggle');
+  var sidebar = document.getElementById('app-sidebar');
+  if (toggle && sidebar) {
+    toggle.addEventListener('click', function() {
+      sidebar.classList.toggle('open');
+    });
+  }
+});
+</script>
 </body>
 </html>

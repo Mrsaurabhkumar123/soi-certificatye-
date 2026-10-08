@@ -13,6 +13,9 @@ class Permissions
 
     public const TENANTS_READ = 'tenants.read';
     public const TENANTS_MANAGE = 'tenants.manage';
+    public const USERS_READ = 'users.read';
+    public const USERS_MANAGE = 'users.manage';
+    public const ROLES_READ = 'roles.read';
     public const ROLES_MANAGE = 'roles.manage';
 
     public const TEMPLATES_READ = 'templates.read';

@@ -35,4 +35,19 @@ class Template
     {
         return $this->status === 'published' && $this->publishedVersionId !== null;
     }
+
+    public function toArray(): array
+    {
+        return [
+            'id' => $this->id,
+            'tenant_id' => $this->tenantId,
+            'slug' => $this->slug,
+            'name' => $this->name,
+            'category' => $this->category,
+            'status' => $this->status,
+            'draft_version_id' => $this->draftVersionId,
+            'published_version_id' => $this->publishedVersionId,
+            'created_at' => $this->createdAt,
+        ];
+    }
 }

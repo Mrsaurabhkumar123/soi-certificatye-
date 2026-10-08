@@ -12,7 +12,7 @@ use SOI\Certificates\Core\Session;
  * @var \SOI\Certificates\Core\Plugin $this->plugin
  */
 ?>
-<div class="card" id="tenant-members-card">
+<div class="card" id="members-section">
   <div class="card-header">
     <div>
       <h2 class="card-title">Tenant Members</h2>
@@ -102,4 +102,61 @@ use SOI\Certificates\Core\Session;
   <?php else: ?>
     <p style="color: var(--text-muted); font-size: 0.9rem;">Your role does not permit managing tenant memberships.</p>
   <?php endif; ?>
+</div>
+
+<!-- Section 8: Roles & Granular Permissions Matrix -->
+<div class="card" id="roles-section">
+  <div class="card-header">
+    <div>
+      <h2 class="card-title">Roles & Granular Permissions Matrix</h2>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0.25rem 0 0;">
+        Decoupled access model: users are accounts, roles define organizational responsibilities, and granular permissions enforce server-side operations.
+      </p>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Baseline Role</th>
+          <th>Responsibility / Scope</th>
+          <th>Key Granular Permissions</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Tenant Owner</strong></td>
+          <td>Full operational & administrative authority over workspace</td>
+          <td><code>tenants.*</code>, <code>users.*</code>, <code>roles.*</code>, <code>templates.*</code>, <code>certificates.*</code>, <code>settings.*</code></td>
+          <td><span class="badge badge-success">System Baseline</span></td>
+        </tr>
+        <tr>
+          <td><strong>Tenant Administrator</strong></td>
+          <td>Administrative oversight and template/issuance operations</td>
+          <td><code>templates.*</code>, <code>certificates.*</code>, <code>users.*</code>, <code>reports.*</code>, <code>api_clients.*</code></td>
+          <td><span class="badge badge-success">System Baseline</span></td>
+        </tr>
+        <tr>
+          <td><strong>Template Designer</strong></td>
+          <td>Creating, drafting, and version publishing of reusable templates</td>
+          <td><code>templates.read</code>, <code>templates.create</code>, <code>templates.update</code>, <code>templates.publish</code>, <code>templates.archive</code></td>
+          <td><span class="badge badge-success">System Baseline</span></td>
+        </tr>
+        <tr>
+          <td><strong>Issuer / Operator</strong></td>
+          <td>Operational day-to-day issuance, batch imports, replacement & revocation</td>
+          <td><code>certificates.read</code>, <code>certificates.issue</code>, <code>certificates.download</code>, <code>certificates.revoke</code>, <code>certificates.replace</code></td>
+          <td><span class="badge badge-success">System Baseline</span></td>
+        </tr>
+        <tr>
+          <td><strong>Viewer / Auditor</strong></td>
+          <td>Read-only inspection and compliance audit access</td>
+          <td><code>templates.read</code>, <code>certificates.read</code>, <code>certificates.download</code>, <code>audit.read</code></td>
+          <td><span class="badge badge-success">System Baseline</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
 </div>

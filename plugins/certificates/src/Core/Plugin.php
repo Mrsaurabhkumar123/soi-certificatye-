@@ -200,6 +200,11 @@ class Plugin
         return self::$instance;
     }
 
+    public function getApiClientContext(): ?array
+    {
+        return $this->apiClientContext;
+    }
+
     protected function initDefaultTenant(): void
     {
         if (!$this->tenantRepo->findBySlug('school-of-interns')) {
@@ -235,8 +240,14 @@ class Plugin
 
         // Base redirect
         $r->get('/', function() {
+            http_response_code(302);
             header('Location: ' . $this->router->url('/console'));
-            exit;
+        });
+
+        // Section 6.1 /admin clarification: canonical tenant administration surface is /manage
+        $r->get('/admin', function() {
+            http_response_code(302);
+            header('Location: ' . $this->router->url('/manage'));
         });
 
         // Surface: /super-admin
@@ -249,8 +260,11 @@ class Plugin
         // Surface: /manage
         $manage = new ManageController($this);
         $r->get('/manage', [$manage, 'index'], [$requirePermission(\SOI\Certificates\Authorization\Permissions::TEMPLATES_READ)]);
+        $r->get('/manage/templates', [$manage, 'index'], [$requirePermission(\SOI\Certificates\Authorization\Permissions::TEMPLATES_READ)]);
         $r->get('/manage/templates/{id}/designer', [$manage, 'designer'], [$requirePermission(\SOI\Certificates\Authorization\Permissions::TEMPLATES_READ)]);
         $r->post('/manage/templates/create', [$manage, 'createTemplate'], [$requirePermission(\SOI\Certificates\Authorization\Permissions::TEMPLATES_CREATE)]);
+        $r->post('/manage/templates/clone', [$manage, 'cloneTemplate'], [$requirePermission(\SOI\Certificates\Authorization\Permissions::TEMPLATES_CREATE)]);
+        $r->post('/manage/templates/archive', [$manage, 'archiveTemplate'], [$requirePermission(\SOI\Certificates\Authorization\Permissions::TEMPLATES_ARCHIVE)]);
         $r->post('/manage/templates/save-draft', [$manage, 'saveTemplateDraft'], [$requirePermission(\SOI\Certificates\Authorization\Permissions::TEMPLATES_UPDATE)]);
         $r->post('/manage/templates/publish', [$manage, 'publishTemplate'], [$requirePermission(\SOI\Certificates\Authorization\Permissions::TEMPLATES_PUBLISH)]);
         $r->post('/manage/settings/branding', [$manage, 'saveBranding'], [$requirePermission(\SOI\Certificates\Authorization\Permissions::SETTINGS_MANAGE)]);
@@ -340,17 +354,21 @@ class Plugin
             };
         };
 
+        $moduleApi = new \SOI\Certificates\Api\ModuleApiController($this);
+
         $r->get('/api/v1/health', function() {
             header('Content-Type: application/json; charset=utf-8');
             echo json_encode(['data' => $this->healthService->runChecks()]);
         }, [$apiMiddleware(\SOI\Certificates\Authorization\Permissions::PLATFORM_READ)]);
 
-        $r->get('/api/v1/templates', function() {
-            header('Content-Type: application/json; charset=utf-8');
-            $list = $this->templateService->getPublishedTemplates();
-            echo json_encode(['data' => array_map(fn($t) => ['id' => $t->id, 'name' => $t->name, 'slug' => $t->slug], $list)]);
-        }, [$apiMiddleware(\SOI\Certificates\Authorization\Permissions::TEMPLATES_READ)]);
+        // Module 1: Templates
+        $r->get('/api/v1/templates', [$moduleApi, 'listTemplates'], [$apiMiddleware(\SOI\Certificates\Authorization\Permissions::TEMPLATES_READ)]);
+        $r->post('/api/v1/templates', [$moduleApi, 'createTemplate'], [$apiMiddleware(\SOI\Certificates\Authorization\Permissions::TEMPLATES_CREATE)]);
+        $r->get('/api/v1/templates/{id}', [$moduleApi, 'getTemplate'], [$apiMiddleware(\SOI\Certificates\Authorization\Permissions::TEMPLATES_READ)]);
+        $r->put('/api/v1/templates/{id}', [$moduleApi, 'updateTemplate'], [$apiMiddleware(\SOI\Certificates\Authorization\Permissions::TEMPLATES_UPDATE)]);
 
+        // Module 2: Certificates
+        $r->get('/api/v1/certificates/{id}', [$moduleApi, 'getCertificate'], [$apiMiddleware(\SOI\Certificates\Authorization\Permissions::CERTIFICATES_READ)]);
         $r->post('/api/v1/certificates', function() {
             header('Content-Type: application/json; charset=utf-8');
             $raw = file_get_contents('php://input');
@@ -421,6 +439,20 @@ class Plugin
                 echo json_encode($response);
             }
         }, [$apiMiddleware(\SOI\Certificates\Authorization\Permissions::CERTIFICATES_ISSUE)]);
+
+        // Module 3: Users
+        $r->get('/api/v1/users', [$moduleApi, 'listUsers'], [$apiMiddleware(\SOI\Certificates\Authorization\Permissions::USERS_READ)]);
+        $r->post('/api/v1/users', [$moduleApi, 'createUser'], [$apiMiddleware(\SOI\Certificates\Authorization\Permissions::USERS_MANAGE)]);
+        $r->get('/api/v1/users/{id}', [$moduleApi, 'getUser'], [$apiMiddleware(\SOI\Certificates\Authorization\Permissions::USERS_READ)]);
+        $r->put('/api/v1/users/{id}', [$moduleApi, 'updateUser'], [$apiMiddleware(\SOI\Certificates\Authorization\Permissions::USERS_MANAGE)]);
+
+        // Module 4: Roles
+        $r->get('/api/v1/roles', [$moduleApi, 'listRoles'], [$apiMiddleware(\SOI\Certificates\Authorization\Permissions::ROLES_READ)]);
+        $r->post('/api/v1/roles', [$moduleApi, 'createRole'], [$apiMiddleware(\SOI\Certificates\Authorization\Permissions::ROLES_MANAGE)]);
+        $r->put('/api/v1/roles/{id}', [$moduleApi, 'updateRole'], [$apiMiddleware(\SOI\Certificates\Authorization\Permissions::ROLES_MANAGE)]);
+
+        // Module 5: Verification
+        $r->get('/api/v1/verification/{token}', [$moduleApi, 'verify']);
     }
 
     public function handleRequest(): void

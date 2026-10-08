@@ -26,9 +26,13 @@ class ApiClientService
         $allowedScopes = [
             'platform.read',
             'templates.read',
+            'templates.manage',
             'certificates.read',
             'certificates.issue',
             'certificates.revoke',
+            'users.read',
+            'users.manage',
+            'roles.read',
         ];
         if ($scopes === []) {
             $scopes = ['certificates.issue', 'certificates.read'];

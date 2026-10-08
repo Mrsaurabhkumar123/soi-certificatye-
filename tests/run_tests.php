@@ -834,6 +834,40 @@ try {
     assertTest("Migration runner discovers and applies 012_add_performance_indexes.php",
         in_array('012_add_performance_indexes.php', $appliedMigrations, true));
 
+    // 5. Senior Updates: Template Management, Categories, Cloning, Archiving & Granular Permissions
+    $categories = $tplService->getCategories();
+    assertTest("Template categories support Certificates, Slides, Portfolio, and BasketHunt applications",
+        in_array('Certificates', $categories, true)
+        && in_array('Slides / Presentations', $categories, true)
+        && in_array('Portfolio', $categories, true)
+        && in_array('BasketHunt Applications', $categories, true));
+
+    $basketHuntTpl = $tplService->createTemplate('baskethunt-demo', 'BasketHunt Demo App', 'BasketHunt Applications');
+    assertTest("Template created with BasketHunt category and draft status",
+        $basketHuntTpl->category === 'BasketHunt Applications' && $basketHuntTpl->status === 'draft');
+
+    $searchResults = $tplService->searchTemplates(['category' => 'BasketHunt Applications']);
+    assertTest("Template search filters by category",
+        count($searchResults) >= 1 && $searchResults[0]->slug === 'baskethunt-demo');
+
+    $clonedTpl = $tplService->cloneTemplate($basketHuntTpl->id, 'baskethunt-demo-clone', 'BasketHunt Demo Cloned');
+    assertTest("Template cloning creates independent draft version with inherited layout",
+        $clonedTpl->id !== $basketHuntTpl->id
+        && $clonedTpl->slug === 'baskethunt-demo-clone'
+        && $clonedTpl->status === 'draft'
+        && $clonedTpl->draftVersionId !== null);
+
+    $archived = $tplService->archiveTemplate($basketHuntTpl->id);
+    $reloaded = $tplService->findById($basketHuntTpl->id);
+    assertTest("Template archiving updates lifecycle status to archived",
+        $archived && $reloaded !== null && $reloaded->status === 'archived');
+
+    assertTest("Granular permissions define users.read, users.manage, and roles.read",
+        defined('\SOI\Certificates\Authorization\Permissions::USERS_READ')
+        && defined('\SOI\Certificates\Authorization\Permissions::USERS_MANAGE')
+        && defined('\SOI\Certificates\Authorization\Permissions::ROLES_READ')
+        && in_array(\SOI\Certificates\Authorization\Permissions::USERS_READ, \SOI\Certificates\Authorization\Role::getDefaultRolePermissions()[\SOI\Certificates\Authorization\Role::TENANT_OWNER], true));
+
     // 5. Final cumulative production ZIP package exists
     $productionZip = dirname(__DIR__) . '/certificates-2.0.0-production.zip';
     assertTest("Final cumulative production ZIP deliverable exists and has valid archive size",

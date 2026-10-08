@@ -30,6 +30,16 @@ class Router
         $this->addRoute('POST', $pattern, $handler, $middleware);
     }
 
+    public function put(string $pattern, callable|array $handler, array $middleware = []): void
+    {
+        $this->addRoute('PUT', $pattern, $handler, $middleware);
+    }
+
+    public function delete(string $pattern, callable|array $handler, array $middleware = []): void
+    {
+        $this->addRoute('DELETE', $pattern, $handler, $middleware);
+    }
+
     public function addRoute(string $method, string $pattern, callable|array $handler, array $middleware = []): void
     {
         $pattern = '/' . trim($pattern, '/');

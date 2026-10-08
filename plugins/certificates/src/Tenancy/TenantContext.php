@@ -47,6 +47,11 @@ class TenantContext
         return $this->currentRole;
     }
 
+    public function getRoleKey(): string
+    {
+        return $this->currentRole;
+    }
+
     public function getCurrentUserId(): ?int
     {
         return $this->currentUserId;

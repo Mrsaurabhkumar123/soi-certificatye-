@@ -26,28 +26,33 @@ ob_start();
   <?php require __DIR__ . '/manage/bulk/wizard.php'; ?>
 <?php endif; ?>
 
-<!-- API Client Management -->
-<?php if ($canManageApiClients): ?>
-  <?php require __DIR__ . '/manage/api/clients.php'; ?>
-<?php endif; ?>
+<!-- API & Integrations -->
+<div id="api-section">
+  <!-- API Client Management -->
+  <?php if ($canManageApiClients): ?>
+    <?php require __DIR__ . '/manage/api/clients.php'; ?>
+  <?php endif; ?>
 
-<!-- Signed Webhooks Configuration -->
-<?php if ($canManageWebhooks): ?>
-  <?php require __DIR__ . '/manage/api/webhooks.php'; ?>
-<?php endif; ?>
+  <!-- Signed Webhooks Configuration -->
+  <?php if ($canManageWebhooks): ?>
+    <?php require __DIR__ . '/manage/api/webhooks.php'; ?>
+  <?php endif; ?>
+</div>
 
-<!-- Tenant Branding & Custom CSS -->
-<?php require __DIR__ . '/manage/settings/branding.php'; ?>
+<!-- Settings & Branding -->
+<div id="settings-section">
+  <!-- Tenant Branding & Custom CSS -->
+  <?php require __DIR__ . '/manage/settings/branding.php'; ?>
 
-<!-- Managed Asset Gallery -->
-<?php if ($canManageAssets): ?>
-  <?php require __DIR__ . '/manage/assets/gallery.php'; ?>
-<?php endif; ?>
+  <!-- Managed Asset Gallery -->
+  <?php if ($canManageAssets): ?>
+    <?php require __DIR__ . '/manage/assets/gallery.php'; ?>
+  <?php endif; ?>
 
-<div class="card">
-  <div class="card-header">
-    <h2 class="card-title">Verification Privacy</h2>
-  </div>
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Verification Privacy</h2>
+    </div>
   <form method="POST" action="<?= htmlspecialchars($this->plugin->router->url('/manage/settings/verification')) ?>">
     <?= Session::csrfField() ?>
     <div class="form-group">
@@ -65,6 +70,7 @@ ob_start();
     </div>
     <button type="submit" class="btn btn-primary btn-sm">Save privacy settings</button>
   </form>
+</div>
 </div>
 
 <?php require __DIR__ . '/manage/members/index.php'; ?>
@@ -196,7 +202,7 @@ ob_start();
   </div>
 
   <!-- Audit Trail -->
-  <div class="card">
+  <div class="card" id="audit-section">
     <div class="card-header">
       <h2 class="card-title">Recent Audit Trail</h2>
     </div>

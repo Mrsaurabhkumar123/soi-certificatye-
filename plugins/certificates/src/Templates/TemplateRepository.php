@@ -145,6 +145,145 @@ final class TemplateRepository
         return $this->findVersionById($draft->id) ?? throw new RuntimeException('Published template version could not be reloaded.');
     }
 
+    public function search(array $filters = []): array
+    {
+        $tenantId = $this->tenantContext->getTenantId();
+        $table = $this->db->tableName('cert_templates');
+        $where = ['tenant_id = :tenant_id'];
+        $params = ['tenant_id' => $tenantId];
+
+        if (!empty($filters['query'])) {
+            $where[] = '(name LIKE :query OR slug LIKE :query)';
+            $params['query'] = '%' . trim((string)$filters['query']) . '%';
+        }
+
+        if (!empty($filters['category']) && $filters['category'] !== 'all') {
+            $where[] = 'category = :category';
+            $params['category'] = (string)$filters['category'];
+        }
+
+        if (!empty($filters['status']) && $filters['status'] !== 'all') {
+            $where[] = 'status = :status';
+            $params['status'] = (string)$filters['status'];
+        }
+
+        $whereClause = implode(' AND ', $where);
+        $limitClause = '';
+        if (isset($filters['limit']) && (int)$filters['limit'] > 0) {
+            $limitClause = ' LIMIT ' . (int)$filters['limit'];
+            if (isset($filters['offset']) && (int)$filters['offset'] > 0) {
+                $limitClause .= ' OFFSET ' . (int)$filters['offset'];
+            }
+        }
+
+        $sql = "SELECT * FROM {$table} WHERE {$whereClause} ORDER BY updated_at DESC, id DESC{$limitClause}";
+        $rows = $this->db->fetchAll($sql, $params);
+        return array_map(fn($r) => new Template($r), $rows);
+    }
+
+    public function archive(int $templateId): bool
+    {
+        $tenantId = $this->tenantContext->getTenantId();
+        $table = $this->db->tableName('cert_templates');
+        $affected = $this->db->execute(
+            "UPDATE {$table} SET status = 'archived', updated_at = :now WHERE id = :id AND tenant_id = :tenant_id",
+            ['now' => date('Y-m-d H:i:s'), 'id' => $templateId, 'tenant_id' => $tenantId]
+        );
+        return $affected > 0;
+    }
+
+    public function supersede(int $templateId): bool
+    {
+        $tenantId = $this->tenantContext->getTenantId();
+        $table = $this->db->tableName('cert_templates');
+        $affected = $this->db->execute(
+            "UPDATE {$table} SET status = 'superseded', updated_at = :now WHERE id = :id AND tenant_id = :tenant_id",
+            ['now' => date('Y-m-d H:i:s'), 'id' => $templateId, 'tenant_id' => $tenantId]
+        );
+        return $affected > 0;
+    }
+
+    public function cloneTemplate(int $templateId, string $newSlug, string $newName, ?string $newCategory = null): Template
+    {
+        $tenantId = $this->tenantContext->getTenantId();
+        $source = $this->findById($templateId);
+        if ($source === null) {
+            throw new RuntimeException('Source template to clone not found.');
+        }
+
+        $sourceVersionId = $source->publishedVersionId ?? $source->draftVersionId;
+        $sourceVersion = $sourceVersionId ? $this->findVersionById($sourceVersionId) : null;
+        if ($sourceVersion === null) {
+            throw new RuntimeException('Source template has no layout version to clone.');
+        }
+
+        $table = $this->db->tableName('cert_templates');
+        $vTable = $this->db->tableName('cert_template_versions');
+        $category = $newCategory ?? $source->category ?? 'Certificates';
+        $now = date('Y-m-d H:i:s');
+
+        $this->db->beginTransaction();
+        try {
+            $this->db->execute(
+                "INSERT INTO {$table} (tenant_id, slug, name, category, status, created_at, updated_at)
+                 VALUES (:tid, :slug, :name, :cat, 'draft', :now1, :now2)",
+                [
+                    'tid' => $tenantId,
+                    'slug' => $newSlug,
+                    'name' => $newName,
+                    'cat' => $category,
+                    'now1' => $now,
+                    'now2' => $now,
+                ]
+            );
+            $newTemplateId = $this->db->lastInsertId();
+
+            $layout = $sourceVersion->layout;
+            $schema = $sourceVersion->variableSchema;
+            $hash = self::canonicalHash($layout, $schema);
+
+            $this->db->execute(
+                "INSERT INTO {$vTable}
+                (template_id, tenant_id, version_number, page_format, layout_json, variable_schema_json, canonical_hash, created_at)
+                VALUES (:tid_fk, :tid, 1, :page_format, :layout, :schema, :hash, :now)",
+                [
+                    'tid_fk' => $newTemplateId,
+                    'tid' => $tenantId,
+                    'page_format' => self::pageFormat($layout),
+                    'layout' => self::encode($layout),
+                    'schema' => self::encode($schema),
+                    'hash' => $hash,
+                    'now' => $now,
+                ]
+            );
+            $newVersionId = $this->db->lastInsertId();
+
+            $this->db->execute(
+                "UPDATE {$table} SET draft_version_id = :vid WHERE id = :id AND tenant_id = :tid",
+                ['vid' => $newVersionId, 'id' => $newTemplateId, 'tid' => $tenantId]
+            );
+
+            $this->db->commit();
+            return $this->findById($newTemplateId) ?? throw new RuntimeException('Cloned template could not be loaded.');
+        } catch (\Throwable $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
+    }
+
+    public function getCategories(): array
+    {
+        $tenantId = $this->tenantContext->getTenantId();
+        $table = $this->db->tableName('cert_templates');
+        $rows = $this->db->fetchAll(
+            "SELECT DISTINCT category FROM {$table} WHERE tenant_id = :tid AND category IS NOT NULL AND category != ''",
+            ['tid' => $tenantId]
+        );
+        $defaults = ['Certificates', 'Slides / Presentations', 'Portfolio', 'BasketHunt Applications'];
+        $existing = array_map(fn($r) => (string)$r['category'], $rows);
+        return array_values(array_unique(array_merge($defaults, $existing)));
+    }
+
     public static function canonicalHash(array $layout, array $variableSchema): string
     {
         $content = ['layout' => self::sortKeys($layout), 'variable_schema' => self::sortKeys($variableSchema)];

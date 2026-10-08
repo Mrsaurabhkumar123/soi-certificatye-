@@ -21,6 +21,9 @@ class Role
             self::TENANT_OWNER => [
                 Permissions::TENANTS_READ,
                 Permissions::TENANTS_MANAGE,
+                Permissions::USERS_READ,
+                Permissions::USERS_MANAGE,
+                Permissions::ROLES_READ,
                 Permissions::ROLES_MANAGE,
                 Permissions::TEMPLATES_READ,
                 Permissions::TEMPLATES_CREATE,
@@ -46,6 +49,10 @@ class Role
             self::TENANT_ADMIN => [
                 Permissions::TENANTS_READ,
                 Permissions::TENANTS_MANAGE,
+                Permissions::USERS_READ,
+                Permissions::USERS_MANAGE,
+                Permissions::ROLES_READ,
+                Permissions::ROLES_MANAGE,
                 Permissions::TEMPLATES_READ,
                 Permissions::TEMPLATES_CREATE,
                 Permissions::TEMPLATES_UPDATE,

@@ -20,6 +20,8 @@ class ManageController
     {
         $tenant = $this->plugin->tenantContext->getTenant();
         $templates = $this->plugin->templateService->getTenantTemplates();
+        $categories = $this->plugin->templateService->getCategories();
+        $recentTemplates = $this->plugin->templateService->getRecentTemplates(6);
         $recentAudit = $this->plugin->audit->getRecent($tenant->id, 20);
         $verificationPolicy = $this->plugin->verificationPolicy->publicConfiguration($tenant->id);
         $members = $this->plugin->tenantRepo->listMemberships($tenant->id);
@@ -729,6 +731,54 @@ class ManageController
             Session::flash('success', "Template '{$name}' created in draft state.");
         } else {
             Session::flash('error', "Template name and slug are required.");
+        }
+
+        header('Location: ' . $this->plugin->router->url('/manage'));
+        exit;
+    }
+
+    public function cloneTemplate(): void
+    {
+        $id = (int)($_POST['template_id'] ?? 0);
+        $newName = trim((string)($_POST['name'] ?? ''));
+        $newSlug = trim((string)($_POST['slug'] ?? ''));
+        $category = trim((string)($_POST['category'] ?? '')) ?: null;
+
+        try {
+            if ($id <= 0) {
+                throw new \InvalidArgumentException('Select a valid template to clone.');
+            }
+            $source = $this->plugin->templateService->findById($id);
+            if ($source === null) {
+                throw new \InvalidArgumentException('Source template not found.');
+            }
+            if ($newName === '') {
+                $newName = $source->name . ' (Clone)';
+            }
+            if ($newSlug === '') {
+                $newSlug = $source->slug . '-copy-' . substr(bin2hex(random_bytes(3)), 0, 5);
+            }
+            $cloned = $this->plugin->templateService->cloneTemplate($id, $newSlug, $newName, $category);
+            Session::flash('success', "Template successfully cloned as draft '{$cloned->name}'.");
+        } catch (\Throwable $e) {
+            error_log('SOI template clone failed: ' . $e->getMessage());
+            Session::flash('error', 'Template could not be cloned: ' . $e->getMessage());
+        }
+
+        header('Location: ' . $this->plugin->router->url('/manage'));
+        exit;
+    }
+
+    public function archiveTemplate(): void
+    {
+        $id = (int)($_POST['template_id'] ?? 0);
+        try {
+            if ($id <= 0 || !$this->plugin->templateService->archiveTemplate($id)) {
+                throw new \InvalidArgumentException('Template could not be archived.');
+            }
+            Session::flash('success', 'Template has been archived.');
+        } catch (\Throwable $e) {
+            Session::flash('error', $e->getMessage());
         }
 
         header('Location: ' . $this->plugin->router->url('/manage'));
