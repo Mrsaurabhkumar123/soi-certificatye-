@@ -18,12 +18,21 @@ final class BulkImportEngine
     private const MAX_ROWS = 5000;
     private const MAX_ATTEMPTS = 5;
 
+    public static function generateRowIdempotencyKey(int $batchId, int $rowNumber): string
+    {
+        return 'bulk:' . $batchId . ':' . $rowNumber;
+    }
+
+    private readonly BatchProgressTracker $tracker;
+
     public function __construct(
         private readonly Database $db,
         private readonly TenantContext $tenantContext,
         private readonly Authorizer $authorizer,
-        private readonly CertificateIssuanceService $issuanceService
+        private readonly CertificateIssuanceService $issuanceService,
+        ?BatchProgressTracker $tracker = null
     ) {
+        $this->tracker = $tracker ?? new BatchProgressTracker($db);
     }
 
     public function createBatch(int $templateId, string $csv, array $columnMapping, ?int $actorId): int
@@ -91,16 +100,7 @@ final class BulkImportEngine
             throw new InvalidArgumentException('A cancelled import batch cannot be resumed.');
         }
 
-        $staleProcessing = $this->db->getDriver() === 'sqlite'
-            ? "processing_at <= datetime('now', '-10 minutes')"
-            : "processing_at <= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 10 MINUTE)";
-        $this->db->execute(
-            "UPDATE {$rowTable} SET status = 'failed', error_message = 'Interrupted processing; safe to retry',
-             processing_at = NULL, updated_at = CURRENT_TIMESTAMP
-             WHERE batch_id = :batch_id AND tenant_id = :tenant_id AND status = 'processing'
-               AND {$staleProcessing}",
-            ['batch_id' => $batchId, 'tenant_id' => $tenantId]
-        );
+        $this->tracker->reclaimStaleProcessing($batchId, $tenantId);
 
         $pending = $this->db->fetchAll(
             "SELECT id, row_number, payload_json, attempts FROM {$rowTable}
@@ -113,19 +113,13 @@ final class BulkImportEngine
         foreach ($pending as $row) {
             $this->db->beginTransaction();
             try {
-                $claimed = $this->db->execute(
-                    "UPDATE {$rowTable}
-                     SET status = 'processing', attempts = attempts + 1,
-                         processing_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-                     WHERE id = :id AND tenant_id = :tenant_id AND status IN ('pending', 'failed')",
-                    ['id' => (int)$row['id'], 'tenant_id' => $tenantId]
-                );
+                $claimed = $this->tracker->claimRow((int)$row['id'], $tenantId);
                 $this->db->commit();
             } catch (Throwable $e) {
                 $this->db->rollBack();
                 throw $e;
             }
-            if ($claimed !== 1) {
+            if (!$claimed) {
                 continue;
             }
 
@@ -150,63 +144,27 @@ final class BulkImportEngine
                         date('Y-m-d'),
                         null,
                         'bulk',
-                        'bulk:' . $batchId . ':' . (int)$row['row_number']
+                        self::generateRowIdempotencyKey($batchId, (int)$row['row_number'])
                     ),
                     $actorId
                 );
-                $this->db->execute(
-                    "UPDATE {$rowTable} SET status = 'succeeded', certificate_id = :certificate_id,
-                     error_message = NULL, processing_at = NULL, updated_at = CURRENT_TIMESTAMP
-                     WHERE id = :id AND tenant_id = :tenant_id AND status = 'processing'",
-                    ['certificate_id' => $certificate->id, 'id' => (int)$row['id'], 'tenant_id' => $tenantId]
-                );
+                $this->tracker->recordRowSuccess((int)$row['id'], $tenantId, $certificate->id);
             } catch (Throwable $e) {
                 error_log('SOI bulk row ' . (int)$row['row_number'] . ' failed: ' . $e->getMessage());
-                $safeError = $e instanceof InvalidArgumentException
-                    ? substr($e->getMessage(), 0, 500)
-                    : 'Issuance failed; contact an administrator.';
-                $this->db->execute(
-                    "UPDATE {$rowTable} SET status = 'failed', error_message = :error,
-                     processing_at = NULL, updated_at = CURRENT_TIMESTAMP
-                     WHERE id = :id AND tenant_id = :tenant_id AND status = 'processing'",
-                    ['error' => $safeError, 'id' => (int)$row['id'], 'tenant_id' => $tenantId]
-                );
+                $this->tracker->recordRowFailure((int)$row['id'], $tenantId, $e);
             }
             $processed++;
         }
 
-        $counts = $this->db->fetchOne(
-            "SELECT COUNT(*) AS total,
-                    SUM(CASE WHEN status = 'succeeded' THEN 1 ELSE 0 END) AS succeeded,
-                    SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
-                    SUM(CASE WHEN status IN ('pending', 'processing')
-                        OR (status = 'failed' AND attempts < :max_attempts) THEN 1 ELSE 0 END) AS remaining
-             FROM {$rowTable} WHERE batch_id = :batch_id AND tenant_id = :tenant_id",
-            ['max_attempts' => self::MAX_ATTEMPTS, 'batch_id' => $batchId, 'tenant_id' => $tenantId]
-        ) ?? ['total' => 0, 'succeeded' => 0, 'failed' => 0, 'remaining' => 0];
-        $status = (int)$counts['remaining'] > 0
-            ? 'processing'
-            : ((int)$counts['failed'] > 0 ? 'completed_with_errors' : 'completed');
-        $this->db->execute(
-            "UPDATE {$batchTable} SET status = :status, succeeded_rows = :succeeded,
-             failed_rows = :failed, updated_at = CURRENT_TIMESTAMP
-             WHERE id = :id AND tenant_id = :tenant_id",
-            [
-                'status' => $status,
-                'succeeded' => (int)$counts['succeeded'],
-                'failed' => (int)$counts['failed'],
-                'id' => $batchId,
-                'tenant_id' => $tenantId,
-            ]
-        );
+        $progress = $this->tracker->recomputeBatchStatus($batchId, $tenantId, self::MAX_ATTEMPTS);
         return [
             'batch_id' => $batchId,
-            'status' => $status,
+            'status' => $progress['status'],
             'processed' => $processed,
-            'total' => (int)$counts['total'],
-            'succeeded' => (int)$counts['succeeded'],
-            'failed' => (int)$counts['failed'],
-            'remaining' => (int)$counts['remaining'],
+            'total' => $progress['total'],
+            'succeeded' => $progress['succeeded'],
+            'failed' => $progress['failed'],
+            'remaining' => $progress['remaining'],
         ];
     }
 

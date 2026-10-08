@@ -704,7 +704,7 @@ class ManageController
                 'verification.policy.updated',
                 'tenant',
                 (string)$tenant->id,
-                ['mode' => $mode, 'pin' => $pin]
+                ['mode' => $mode, 'pin_configured' => ($pin !== null && $pin !== '')]
             );
             Session::flash('success', 'Verification privacy settings saved.');
         } catch (\InvalidArgumentException $e) {

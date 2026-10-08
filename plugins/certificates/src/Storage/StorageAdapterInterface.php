@@ -14,5 +14,8 @@ interface StorageAdapterInterface
     public function delete(string $relativePath): bool;
     public function hash(string $relativePath): ?string;
     public function size(string $relativePath): int;
+    public function isWritable(?string $relativePath = null): bool;
+    public function getFreeDiskSpace(?string $relativePath = null): float|int;
+    public function hasSufficientDiskSpace(int $thresholdBytes = 10485760, ?string $relativePath = null): bool;
     public function getAbsolutePath(string $relativePath): string;
 }

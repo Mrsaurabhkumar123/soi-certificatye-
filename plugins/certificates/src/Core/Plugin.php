@@ -28,6 +28,7 @@ use SOI\Certificates\Storage\AssetUploader;
 use SOI\Certificates\Templates\TemplateService;
 use SOI\Certificates\Tenancy\TenantContext;
 use SOI\Certificates\Tenancy\TenantRepository;
+use SOI\Certificates\Tenancy\TenantThemeManager;
 use SOI\Certificates\Scheduling\JobScheduler;
 use SOI\Certificates\Scheduling\ScheduleProcessor;
 use SOI\Certificates\Verification\VerificationService;
@@ -50,6 +51,7 @@ class Plugin
     public ArtifactStorageService $artifactStorage;
     public AssetUploader $assetUploader;
     public TenantRepository $tenantRepo;
+    public TenantThemeManager $themeManager;
     public TenantContext $tenantContext;
     public Authorizer $authorizer;
     public AuditService $audit;
@@ -91,7 +93,8 @@ class Plugin
         }
 
         // 3. Resolve identity from the CMS integration. Standalone access is development-only.
-        $this->tenantRepo = new TenantRepository($this->db);
+        $this->themeManager = new TenantThemeManager();
+        $this->tenantRepo = new TenantRepository($this->db, $this->themeManager);
         $identity = CmsIdentity::current();
         $standaloneDemo = getenv('SOI_CERT_ENV') === 'development'
             && getenv('SOI_CERT_STANDALONE_DEMO') === '1';

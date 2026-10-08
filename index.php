@@ -6,6 +6,13 @@ declare(strict_types=1);
  * Allows instant local testing via `php -S localhost:8000 index.php`.
  */
 
+if (getenv('SOI_CERT_ENV') === false || getenv('SOI_CERT_ENV') === '') {
+    putenv('SOI_CERT_ENV=development');
+}
+if (getenv('SOI_CERT_STANDALONE_DEMO') === false || getenv('SOI_CERT_STANDALONE_DEMO') === '') {
+    putenv('SOI_CERT_STANDALONE_DEMO=1');
+}
+
 $uri = $_SERVER['REQUEST_URI'] ?? '/';
 
 // Serve static assets directly if requested

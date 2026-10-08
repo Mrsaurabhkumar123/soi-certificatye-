@@ -121,6 +121,40 @@ class LocalStorageAdapter implements StorageAdapterInterface
         return (int)filesize($fullPath);
     }
 
+    public function getBaseDir(): string
+    {
+        return $this->baseDir;
+    }
+
+    public function isWritable(?string $relativePath = null): bool
+    {
+        $path = $relativePath !== null && $relativePath !== ''
+            ? $this->getAbsolutePath($relativePath)
+            : $this->baseDir;
+
+        return is_dir($path) ? is_writable($path) : (file_exists($path) ? is_writable($path) : is_writable(dirname($path)));
+    }
+
+    public function getFreeDiskSpace(?string $relativePath = null): float|int
+    {
+        $path = $relativePath !== null && $relativePath !== ''
+            ? $this->getAbsolutePath($relativePath)
+            : $this->baseDir;
+
+        $target = file_exists($path) ? $path : dirname($path);
+        $space = @disk_free_space($target);
+        return $space !== false ? $space : -1;
+    }
+
+    public function hasSufficientDiskSpace(int $thresholdBytes = 10485760, ?string $relativePath = null): bool
+    {
+        $free = $this->getFreeDiskSpace($relativePath);
+        if ($free < 0) {
+            return true;
+        }
+        return $free >= $thresholdBytes;
+    }
+
     private function ensureDirectory(string $directory): void
     {
         $directory = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $directory);

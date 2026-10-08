@@ -1,2 +1,9 @@
-plugins/certificates/storage/
-updates/*.zip
+plugins/certificates/storage/certificates/*
+!plugins/certificates/storage/certificates/.htaccess
+!plugins/certificates/storage/certificates/index.html
+plugins/certificates/storage/certificate-assets/*
+!plugins/certificates/storage/certificate-assets/.htaccess
+!plugins/certificates/storage/certificate-assets/index.html
+plugins/certificates/storage/data/
+*.sqlite
+*.tmp

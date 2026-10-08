@@ -12,10 +12,12 @@ use InvalidArgumentException;
 class TenantRepository
 {
     protected Database $db;
+    protected TenantThemeManager $themeManager;
 
-    public function __construct(Database $db)
+    public function __construct(Database $db, ?TenantThemeManager $themeManager = null)
     {
         $this->db = $db;
+        $this->themeManager = $themeManager ?? new TenantThemeManager();
     }
 
     public function findById(int $id): ?Tenant
@@ -77,18 +79,7 @@ class TenantRepository
         if ($tenantId < 1) {
             throw new InvalidArgumentException('Tenant context is required to update branding.');
         }
-        $allowed = ['primary_color', 'accent_color', 'logo'];
-        if (array_diff(array_keys($branding), $allowed) !== []) {
-            throw new InvalidArgumentException('Branding contains an unsupported setting.');
-        }
-        foreach (['primary_color', 'accent_color'] as $color) {
-            if (isset($branding[$color]) && (!is_string($branding[$color]) || !preg_match('/^#[0-9A-Fa-f]{6}$/', $branding[$color]))) {
-                throw new InvalidArgumentException('Branding colors must use #RRGGBB format.');
-            }
-        }
-        if (isset($branding['logo']) && (!is_string($branding['logo']) || strlen($branding['logo']) > 255)) {
-            throw new InvalidArgumentException('Branding logo reference is invalid.');
-        }
+        $cleanBranding = $this->themeManager->validateAndNormalize($branding);
 
         $table = $this->db->tableName('cert_tenants');
         if ($this->findById($tenantId) === null) {
@@ -96,7 +87,7 @@ class TenantRepository
         }
         $this->db->execute(
             "UPDATE {$table} SET branding_json = :branding, updated_at = CURRENT_TIMESTAMP WHERE id = :id",
-            ['branding' => json_encode($branding, JSON_THROW_ON_ERROR), 'id' => $tenantId]
+            ['branding' => json_encode($cleanBranding, JSON_THROW_ON_ERROR), 'id' => $tenantId]
         );
         return true;
     }

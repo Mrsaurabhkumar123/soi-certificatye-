@@ -48,7 +48,7 @@ class MigrationRunner
         $files = scandir($this->migrationsDir);
         $migrations = [];
         foreach ($files as $file) {
-            if (str_ends_with($file, '.sql')) {
+            if (str_ends_with($file, '.sql') || str_ends_with($file, '.php')) {
                 $migrations[] = $file;
             }
         }
@@ -71,12 +71,22 @@ class MigrationRunner
 
         foreach ($pending as $migrationFile) {
             $filePath = $this->migrationsDir . DIRECTORY_SEPARATOR . $migrationFile;
-            $sqlContent = file_get_contents($filePath);
-            if ($sqlContent === false) {
-                throw new Exception("Unable to read migration file: {$migrationFile}");
+            if (str_ends_with($migrationFile, '.php')) {
+                $exported = require $filePath;
+                if (is_callable($exported)) {
+                    $exported($this->db);
+                } elseif (is_string($exported) && trim($exported) !== '') {
+                    $this->executeSqlStatements($exported);
+                } elseif (is_object($exported) && method_exists($exported, 'up')) {
+                    $exported->up($this->db);
+                }
+            } else {
+                $sqlContent = file_get_contents($filePath);
+                if ($sqlContent === false) {
+                    throw new Exception("Unable to read migration file: {$migrationFile}");
+                }
+                $this->executeSqlStatements($sqlContent);
             }
-
-            $this->executeSqlStatements($sqlContent);
 
             $table = $this->db->tableName('cert_migrations');
             $this->db->execute(

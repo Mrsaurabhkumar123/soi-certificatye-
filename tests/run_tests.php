@@ -742,6 +742,103 @@ try {
     assertTest("Webhook dispatcher records successful signed delivery",
         $signatureVerified && $deliveryResult['claimed'] === 1 && $deliveryResult['succeeded'] === 1);
 
+    // Developer 1 deliverables verification
+    $themeManager = new \SOI\Certificates\Tenancy\TenantThemeManager();
+    $defaultTheme = $themeManager->getEffectiveTheme([]);
+    assertTest("TenantThemeManager provides default enterprise colors",
+        $defaultTheme['primary_color'] === '#1e3a8a' && $defaultTheme['accent_color'] === '#d97706');
+
+    $validBranding = $themeManager->validateAndNormalize([
+        'primary_color' => '#2563EB',
+        'accent_color' => '#10B981',
+        'logo' => 'custom-logo.svg',
+    ]);
+    assertTest("TenantThemeManager normalizes hex colors and validates logo",
+        $validBranding['primary_color'] === '#2563eb' && $validBranding['accent_color'] === '#10b981');
+
+    $invalidColorCaught = false;
+    try {
+        $themeManager->validateAndNormalize(['primary_color' => 'invalid-color']);
+    } catch (\InvalidArgumentException) {
+        $invalidColorCaught = true;
+    }
+    assertTest("TenantThemeManager rejects invalid color hex formats", $invalidColorCaught);
+
+    $themeCss = $themeManager->getThemeCss($validBranding);
+    assertTest("TenantThemeManager generates valid CSS Custom Properties",
+        str_contains($themeCss, '--tenant-primary: #2563eb') && str_contains($themeCss, '--tenant-accent: #10b981'));
+
+    // API client secret rotation
+    $apiClients = new \SOI\Certificates\Api\ApiClientService($db);
+    $createdClient = $apiClients->createClient($tenantA->id, 'Rotatable Client', ['certificates.read']);
+    $allClients = $apiClients->listForTenant($tenantA->id);
+    $targetClientId = (int)$allClients[0]['id'];
+    $rotated = $apiClients->rotateSecret($tenantA->id, $targetClientId);
+    assertTest("ApiClientService rotates API client secret and returns new secret once",
+        $rotated !== null && !empty($rotated['secret']) && $rotated['secret'] !== $createdClient['secret']);
+
+    // Row-level idempotency key generator
+    $bulkKey = \SOI\Certificates\Bulk\BulkImportEngine::generateRowIdempotencyKey(42, 5);
+    assertTest("BulkImportEngine generates deterministic row-level idempotency key", $bulkKey === 'bulk:42:5');
+
+    // BatchProgressTracker progress and status computation
+    $tracker = new \SOI\Certificates\Bulk\BatchProgressTracker($db);
+    $trackerProgress = $tracker->getProgress($bulkBatchId, $tenantA->id);
+    assertTest("BatchProgressTracker tracks progress and calculates completion percentage",
+        $trackerProgress !== null && $trackerProgress['total'] === 2 && $trackerProgress['percent'] === 100);
+
+    // AuditLogger lifecycle methods
+    $auditLogger = new \SOI\Certificates\Audit\AuditLogger($db);
+    $auditLogger->logRevocation($tenantA->id, 999, 'Test Revocation Reason', 1);
+    $recentAudit = $auditLogger->getRecent($tenantA->id, 1);
+    assertTest("AuditLogger logs certificate revocation with mandatory reason",
+        count($recentAudit) === 1
+        && $recentAudit[0]['event_key'] === 'certificate.revoked'
+        && str_contains((string)$recentAudit[0]['metadata_json'], 'Test Revocation Reason'));
+
+    // Developer 4 deliverables verification
+    // 1. LocalStorageAdapter writability and free disk space threshold
+    assertTest("LocalStorageAdapter reports storage directory writability and sufficient free space",
+        $storage->isWritable() && $storage->hasSufficientDiskSpace(1048576) && $storage->getFreeDiskSpace() > 0);
+
+    // 2. WebhookDispatcher: HMAC-SHA256 signature, payload formatting, SSRF protection, and backoff
+    $webhookDispatcher = new \SOI\Certificates\Webhooks\WebhookDispatcher($db);
+    $testTimestamp = 1760000000;
+    $testPayload = $webhookDispatcher->formatPayload('certificate.issued', ['id' => 456]);
+    $testSig = $webhookDispatcher->signPayload($testPayload, 'my-test-secret-key-1234567890123456', $testTimestamp);
+    assertTest("WebhookDispatcher signs formatted payload using HMAC-SHA256",
+        str_contains($testPayload, '"type":"certificate.issued"')
+        && hash_equals(hash_hmac('sha256', "{$testTimestamp}.{$testPayload}", 'my-test-secret-key-1234567890123456'), $testSig));
+
+    assertTest("WebhookDispatcher blocks SSRF loopback and non-HTTPS targets",
+        !$webhookDispatcher->isSafeUrl('http://127.0.0.1/hook')
+        && !$webhookDispatcher->isSafeUrl('http://localhost:8080/hook')
+        && !$webhookDispatcher->isSafeUrl('https://169.254.169.254/latest/meta-data')
+        && $webhookDispatcher->calculateRetryDelay(1) === 30
+        && $webhookDispatcher->calculateRetryDelay(3) === 120);
+
+    // 3. PublicVerificationController and neutral placeholder view
+    $pluginInstance = \SOI\Certificates\Core\Plugin::init($baseDir);
+    $publicVerifyCtrl = new \SOI\Certificates\Verification\PublicVerificationController($pluginInstance);
+    ob_start();
+    $publicVerifyCtrl->renderPlaceholder('unknown-token-123', 'Custom Neutral Placeholder', 'Record not accessible.');
+    $placeholderHtml = ob_get_clean();
+    assertTest("PublicVerificationController renders safe neutral placeholder view without information leakage",
+        str_contains($placeholderHtml, 'Custom Neutral Placeholder')
+        && str_contains($placeholderHtml, 'Record not accessible.')
+        && str_contains($placeholderHtml, 'unknown-token-123')
+        && !str_contains($placeholderHtml, 'Jane Developer'));
+
+    // 4. Performance Indexes Migration 012 applied
+    $appliedMigrations = $migrationRunner->getAppliedMigrations();
+    assertTest("Migration runner discovers and applies 012_add_performance_indexes.php",
+        in_array('012_add_performance_indexes.php', $appliedMigrations, true));
+
+    // 5. Final cumulative production ZIP package exists
+    $productionZip = dirname(__DIR__) . '/certificates-2.0.0-production.zip';
+    assertTest("Final cumulative production ZIP deliverable exists and has valid archive size",
+        file_exists($productionZip) && filesize($productionZip) > 50000);
+
     // Clean up test DB
     @unlink($testDbPath);
 

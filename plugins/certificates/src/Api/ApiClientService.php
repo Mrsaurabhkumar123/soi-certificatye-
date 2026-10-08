@@ -104,4 +104,37 @@ class ApiClientService
             ['id' => $clientId, 'tenant_id' => $tenantId]
         ) === 1;
     }
+
+    /**
+     * Rotate client API secret. Generates a new cryptographically secure secret,
+     * hashes it for storage, and returns the plaintext secret exactly once.
+     */
+    public function rotateSecret(int $tenantId, int $clientId): ?array
+    {
+        if ($tenantId < 1 || $clientId < 1) {
+            return null;
+        }
+        $table = $this->db->tableName('cert_api_clients');
+        $existing = $this->db->fetchOne(
+            "SELECT id, client_id, scopes_json FROM {$table} WHERE id = :id AND tenant_id = :tenant_id AND status = 'active'",
+            ['id' => $clientId, 'tenant_id' => $tenantId]
+        );
+        if (!$existing) {
+            return null;
+        }
+
+        $newSecret = 'sec_' . bin2hex(random_bytes(24));
+        $newHash = hash('sha256', $newSecret);
+
+        $this->db->execute(
+            "UPDATE {$table} SET secret_hash = :shash WHERE id = :id AND tenant_id = :tenant_id AND status = 'active'",
+            ['shash' => $newHash, 'id' => $clientId, 'tenant_id' => $tenantId]
+        );
+
+        return [
+            'client_id' => (string)$existing['client_id'],
+            'secret' => $newSecret,
+            'scopes' => json_decode($existing['scopes_json'] ?? '[]', true) ?: [],
+        ];
+    }
 }

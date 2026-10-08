@@ -11,15 +11,22 @@ use SOI\Certificates\Core\Database;
 class WebhookService
 {
     protected Database $db;
+    protected WebhookDispatcher $dispatcher;
 
-    public function __construct(Database $db)
+    public function __construct(Database $db, ?WebhookDispatcher $dispatcher = null)
     {
         $this->db = $db;
+        $this->dispatcher = $dispatcher ?? new WebhookDispatcher($db);
+    }
+
+    public function getDispatcher(): WebhookDispatcher
+    {
+        return $this->dispatcher;
     }
 
     public function signPayload(string $rawPayload, string $secret, int $timestamp): string
     {
-        return hash_hmac('sha256', "{$timestamp}.{$rawPayload}", $secret);
+        return $this->dispatcher->signPayload($rawPayload, $secret, $timestamp);
     }
 
     public function createWebhook(int $tenantId, string $name, string $url, string $secret, array $events): int
@@ -180,57 +187,7 @@ class WebhookService
 
     public function isSafeUrl(string $url): bool
     {
-        if (preg_match('/[\x00-\x20\x7f]/', $url)) {
-            return false;
-        }
-        $parts = parse_url($url);
-        if (!$parts || empty($parts['scheme']) || strtolower($parts['scheme']) !== 'https'
-            || isset($parts['user']) || isset($parts['pass']) || isset($parts['fragment'])) {
-            return false;
-        }
-
-        $host = strtolower(rtrim((string)($parts['host'] ?? ''), '.'));
-        if (empty($host)) {
-            return false;
-        }
-        if (isset($parts['port']) && (int)$parts['port'] !== 443) {
-            return false;
-        }
-
-        if ($host === 'localhost' || str_ends_with($host, '.localhost') || str_ends_with($host, '.local')
-            || $host === 'metadata.google.internal' || $host === 'metadata') {
-            return false;
-        }
-
-        $addresses = [];
-        if (filter_var($host, FILTER_VALIDATE_IP)) {
-            $addresses[] = $host;
-        } else {
-            $ipv4 = gethostbynamel($host);
-            if (is_array($ipv4)) {
-                $addresses = array_merge($addresses, $ipv4);
-            }
-            if (function_exists('dns_get_record')) {
-                $records = dns_get_record($host, DNS_AAAA);
-                if (is_array($records)) {
-                    foreach ($records as $record) {
-                        if (!empty($record['ipv6'])) {
-                            $addresses[] = $record['ipv6'];
-                        }
-                    }
-                }
-            }
-        }
-        if ($addresses === []) {
-            return false;
-        }
-
-        foreach (array_unique($addresses) as $address) {
-            if (filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
-                return false;
-            }
-        }
-        return true;
+        return $this->dispatcher->isSafeUrl($url);
     }
 
     private function encryptSecret(string $secret): string

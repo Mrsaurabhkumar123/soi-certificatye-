@@ -6,85 +6,12 @@ $pageTitle = "Platform Super Admin - SOI Certificates";
 ob_start();
 ?>
 
-<div class="grid-4" style="margin-bottom: 2rem;">
-  <div class="stat-box">
-    <span class="stat-label">Active Tenants</span>
-    <span class="stat-value"><?= $activeTenantCount ?></span>
-  </div>
-  <div class="stat-box">
-    <span class="stat-label">Total Certificates Issued</span>
-    <span class="stat-value"><?= $totalCerts ?></span>
-  </div>
-  <div class="stat-box">
-    <span class="stat-label">Suspended Tenants</span>
-    <span class="stat-value"><?= $suspendedTenantCount ?></span>
-  </div>
-  <div class="stat-box">
-    <span class="stat-label">Platform Health</span>
-    <span class="stat-value" style="color: <?= $health['status'] === 'healthy' ? 'var(--success)' : 'var(--danger)' ?>;">
-      <?= strtoupper($health['status']) ?>
-    </span>
-  </div>
-</div>
+<?php require __DIR__ . '/super-admin/dashboard.php'; ?>
 
 <div class="grid-2">
   <!-- Tenant Directory -->
-  <div class="card">
-    <div class="card-header">
-      <h2 class="card-title">Tenant Organizations</h2>
-    </div>
+  <?php require __DIR__ . '/super-admin/tenants/index.php'; ?>
 
-    <div class="table-responsive">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Name / Slug</th>
-            <th>Status</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          <?php foreach ($tenants as $t): ?>
-            <tr>
-              <td>
-                <strong><?= htmlspecialchars($t->displayName) ?></strong><br>
-                <small style="color: var(--text-muted);"><?= htmlspecialchars($t->slug) ?></small>
-              </td>
-              <td>
-                <span class="badge <?= $t->status === 'active' ? 'badge-success' : 'badge-danger' ?>">
-                  <?= htmlspecialchars($t->status) ?>
-                </span>
-              </td>
-              <td>
-                <form method="POST" action="<?= htmlspecialchars($this->plugin->router->url('/super-admin/tenants/suspend')) ?>" style="display:inline;">
-                  <?= Session::csrfField() ?>
-                  <input type="hidden" name="tenant_id" value="<?= $t->id ?>">
-                  <input type="hidden" name="status" value="<?= $t->status ?>">
-                  <button type="submit" class="btn btn-outline btn-sm">
-                    <?= $t->status === 'active' ? 'Suspend' : 'Activate' ?>
-                  </button>
-                </form>
-              </td>
-            </tr>
-          <?php endforeach; ?>
-        </tbody>
-      </table>
-    </div>
-
-    <h3 style="font-size: 0.95rem; margin: 1.5rem 0 0.75rem;">Create New Tenant</h3>
-    <form method="POST" action="<?= htmlspecialchars($this->plugin->router->url('/super-admin/tenants/create')) ?>">
-      <?= Session::csrfField() ?>
-      <div class="form-group">
-        <label class="form-label">Organization Name</label>
-        <input type="text" name="display_name" class="form-control" placeholder="e.g. Acme Academy" required>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Tenant Slug</label>
-        <input type="text" name="slug" class="form-control" placeholder="e.g. acme-academy" required>
-      </div>
-      <button type="submit" class="btn btn-primary btn-sm">Create Tenant</button>
-    </form>
-  </div>
 
   <!-- System Health & Migrations -->
   <div class="card">
