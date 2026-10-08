@@ -197,3 +197,8 @@ Outputs:
 
 Developed for **School Of Interns (SOI)**.  
 Engineered under the **SOI Certificate Management Platform Architecture Specification & 12-Prompt Delivery Plan**.
+<img width="1891" height="978" alt="image" src="https://github.com/user-attachments/assets/2e4c7cec-6af1-4117-b7fc-d772c6f7410c" />
+<img width="1911" height="976" alt="image" src="https://github.com/user-attachments/assets/b9802bef-6de6-46bd-8303-3714ed0271d0" />
+<img width="1912" height="977" alt="image" src="https://github.com/user-attachments/assets/c0b21e05-f576-48fa-afa0-f4c86371a2fd" />
+<img width="1911" height="983" alt="image" src="https://github.com/user-attachments/assets/884a58be-103c-40e3-8bc8-273580860cb4" />
+
