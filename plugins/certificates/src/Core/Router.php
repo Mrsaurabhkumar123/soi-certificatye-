@@ -73,6 +73,12 @@ class Router
             $uri = substr($uri, strlen($this->basePath));
         }
 
+        if (str_starts_with($uri, '/index.php/')) {
+            $uri = substr($uri, 10);
+        } elseif ($uri === '/index.php') {
+            $uri = '/';
+        }
+
         $uri = '/' . trim($uri, '/');
 
         // Automatic CSRF verification on state-changing browser routes (ignore /api/)

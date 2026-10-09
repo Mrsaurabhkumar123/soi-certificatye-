@@ -34,6 +34,7 @@ if (!defined('SOI_CERTIFICATES_LOADED')) {
         add_action('soi_routes', function (string $uri, string $method) {
             $routes = ['manage', 'console', 'verify', 'forms', 'docs', 'super-admin', 'api/v1', 'scheduler'];
             $cleanUri = trim($uri, '/');
+            $cleanUri = preg_replace('#^index\.php/?#', '', $cleanUri);
             foreach ($routes as $route) {
                 if ($cleanUri === $route || str_starts_with($cleanUri, $route . '/')) {
                     \SOI\Certificates\Core\Plugin::getInstance()->handleRequest();
