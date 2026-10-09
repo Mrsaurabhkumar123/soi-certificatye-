@@ -253,7 +253,7 @@ CREATE TABLE IF NOT EXISTS cert_audit_log (
 
 
 -- Migration: 002_template_version_lock.sql
-CREATE UNIQUE INDEX uq_cert_template_version_sequence
+CREATE UNIQUE INDEX IF NOT EXISTS uq_cert_template_version_sequence
     ON cert_template_versions (template_id, version_number);
 
 
@@ -274,34 +274,34 @@ WHERE verification_token IS NOT NULL AND verification_token <> '';
 
 
 -- Migration: 005_certificate_replacement_links.sql
-ALTER TABLE cert_certificates ADD COLUMN replaces_certificate_id INT NULL;
-ALTER TABLE cert_certificates ADD COLUMN replaced_by_certificate_id INT NULL;
-CREATE INDEX idx_cert_replaces ON cert_certificates (tenant_id, replaces_certificate_id);
-CREATE INDEX idx_cert_replaced_by ON cert_certificates (tenant_id, replaced_by_certificate_id);
+ALTER TABLE cert_certificates ADD COLUMN IF NOT EXISTS replaces_certificate_id INT NULL;
+ALTER TABLE cert_certificates ADD COLUMN IF NOT EXISTS replaced_by_certificate_id INT NULL;
+CREATE INDEX IF NOT EXISTS idx_cert_replaces ON cert_certificates (tenant_id, replaces_certificate_id);
+CREATE INDEX IF NOT EXISTS idx_cert_replaced_by ON cert_certificates (tenant_id, replaced_by_certificate_id);
 
 
 -- Migration: 006_form_approval_tracking.sql
-ALTER TABLE cert_form_submissions ADD COLUMN reviewed_by INT NULL;
-ALTER TABLE cert_form_submissions ADD COLUMN reviewed_at DATETIME NULL;
-ALTER TABLE cert_form_submissions ADD COLUMN decision_reason TEXT NULL;
+ALTER TABLE cert_form_submissions ADD COLUMN IF NOT EXISTS reviewed_by INT NULL;
+ALTER TABLE cert_form_submissions ADD COLUMN IF NOT EXISTS reviewed_at DATETIME NULL;
+ALTER TABLE cert_form_submissions ADD COLUMN IF NOT EXISTS decision_reason TEXT NULL;
 
 
 -- Migration: 007_scheduling_idempotency.sql
-ALTER TABLE cert_certificates ADD COLUMN source_reference VARCHAR(128) NULL;
-ALTER TABLE cert_certificates ADD COLUMN source_fingerprint VARCHAR(64) NULL;
-CREATE UNIQUE INDEX uq_cert_source_reference ON cert_certificates (tenant_id, source_reference);
-ALTER TABLE cert_schedules ADD COLUMN payload_json TEXT NULL;
-ALTER TABLE cert_schedules ADD COLUMN timezone VARCHAR(64) NOT NULL DEFAULT 'UTC';
-ALTER TABLE cert_schedules ADD COLUMN last_run_at DATETIME NULL;
-ALTER TABLE cert_schedules ADD COLUMN last_result VARCHAR(32) NULL;
-ALTER TABLE cert_jobs ADD COLUMN dedupe_key VARCHAR(128) NULL;
-CREATE UNIQUE INDEX uq_cert_job_dedupe ON cert_jobs (tenant_id, dedupe_key);
+ALTER TABLE cert_certificates ADD COLUMN IF NOT EXISTS source_reference VARCHAR(128) NULL;
+ALTER TABLE cert_certificates ADD COLUMN IF NOT EXISTS source_fingerprint VARCHAR(64) NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_cert_source_reference ON cert_certificates (tenant_id, source_reference);
+ALTER TABLE cert_schedules ADD COLUMN IF NOT EXISTS payload_json TEXT NULL;
+ALTER TABLE cert_schedules ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) NOT NULL DEFAULT 'UTC';
+ALTER TABLE cert_schedules ADD COLUMN IF NOT EXISTS last_run_at DATETIME NULL;
+ALTER TABLE cert_schedules ADD COLUMN IF NOT EXISTS last_result VARCHAR(32) NULL;
+ALTER TABLE cert_jobs ADD COLUMN IF NOT EXISTS dedupe_key VARCHAR(128) NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_cert_job_dedupe ON cert_jobs (tenant_id, dedupe_key);
 
 
 -- Migration: 008_forms_and_bulk_import.sql
-ALTER TABLE cert_forms ADD COLUMN field_schema_json TEXT NOT NULL DEFAULT '{}';
-ALTER TABLE cert_forms ADD COLUMN issue_mode VARCHAR(32) NOT NULL DEFAULT 'approval';
-ALTER TABLE cert_forms ADD COLUMN updated_at DATETIME NULL;
+ALTER TABLE cert_forms ADD COLUMN IF NOT EXISTS field_schema_json TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE cert_forms ADD COLUMN IF NOT EXISTS issue_mode VARCHAR(32) NOT NULL DEFAULT 'approval';
+ALTER TABLE cert_forms ADD COLUMN IF NOT EXISTS updated_at DATETIME NULL;
 
 CREATE TABLE IF NOT EXISTS cert_bulk_batches (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -321,7 +321,7 @@ CREATE TABLE IF NOT EXISTS cert_bulk_rows (
     id INT AUTO_INCREMENT PRIMARY KEY,
     batch_id INT NOT NULL,
     tenant_id INT NOT NULL,
-    row_number INT NOT NULL,
+    `row_number` INT NOT NULL,
     payload_json TEXT NOT NULL,
     status VARCHAR(32) NOT NULL DEFAULT 'pending',
     attempts INT NOT NULL DEFAULT 0,
@@ -330,18 +330,18 @@ CREATE TABLE IF NOT EXISTS cert_bulk_rows (
     processing_at DATETIME NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_bulk_batch_row (batch_id, row_number),
-    KEY idx_bulk_row_work (tenant_id, batch_id, status, row_number)
+    UNIQUE KEY uq_bulk_batch_row (batch_id, `row_number`),
+    KEY idx_bulk_row_work (tenant_id, batch_id, status, `row_number`)
 );
 
 
 -- Migration: 009_add_performance_indexes.sql
-CREATE INDEX idx_cert_tenant_issued_at ON cert_certificates (tenant_id, issued_at);
-CREATE INDEX idx_cert_tenant_status_date ON cert_certificates (tenant_id, status, issued_at);
-CREATE INDEX idx_cert_tenant_number ON cert_certificates (tenant_id, certificate_number);
-CREATE INDEX idx_cert_tenant_recipient ON cert_certificates (tenant_id, recipient_name);
-CREATE INDEX idx_form_submission_queue ON cert_form_submissions (tenant_id, status, created_at);
-CREATE INDEX idx_webhook_due_delivery ON cert_webhook_deliveries (tenant_id, status, next_retry_at, id);
-CREATE INDEX idx_audit_tenant_recent ON cert_audit_log (tenant_id, created_at, id);
-CREATE INDEX idx_template_tenant_status ON cert_templates (tenant_id, status, name);
+CREATE INDEX IF NOT EXISTS idx_cert_tenant_issued_at ON cert_certificates (tenant_id, issued_at);
+CREATE INDEX IF NOT EXISTS idx_cert_tenant_status_date ON cert_certificates (tenant_id, status, issued_at);
+CREATE INDEX IF NOT EXISTS idx_cert_tenant_number ON cert_certificates (tenant_id, certificate_number);
+CREATE INDEX IF NOT EXISTS idx_cert_tenant_recipient ON cert_certificates (tenant_id, recipient_name);
+CREATE INDEX IF NOT EXISTS idx_form_submission_queue ON cert_form_submissions (tenant_id, status, created_at);
+CREATE INDEX IF NOT EXISTS idx_webhook_due_delivery ON cert_webhook_deliveries (tenant_id, status, next_retry_at, id);
+CREATE INDEX IF NOT EXISTS idx_audit_tenant_recent ON cert_audit_log (tenant_id, created_at, id);
+CREATE INDEX IF NOT EXISTS idx_template_tenant_status ON cert_templates (tenant_id, status, name);
 

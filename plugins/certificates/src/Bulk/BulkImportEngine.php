@@ -64,7 +64,7 @@ final class BulkImportEngine
             $batchId = $this->db->lastInsertId();
             foreach ($rows as $index => $payload) {
                 $this->db->execute(
-                    "INSERT INTO {$rowTable} (batch_id, tenant_id, row_number, payload_json, status, created_at, updated_at)
+                    "INSERT INTO {$rowTable} (batch_id, tenant_id, `row_number`, payload_json, status, created_at, updated_at)
                      VALUES (:batch_id, :tenant_id, :row_number, :payload, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
                     [
                         'batch_id' => $batchId,
@@ -103,10 +103,10 @@ final class BulkImportEngine
         $this->tracker->reclaimStaleProcessing($batchId, $tenantId);
 
         $pending = $this->db->fetchAll(
-            "SELECT id, row_number, payload_json, attempts FROM {$rowTable}
+            "SELECT id, `row_number`, payload_json, attempts FROM {$rowTable}
              WHERE batch_id = :batch_id AND tenant_id = :tenant_id
                AND status IN ('pending', 'failed') AND attempts < :max_attempts
-             ORDER BY row_number ASC LIMIT {$limit}",
+             ORDER BY `row_number` ASC LIMIT {$limit}",
             ['batch_id' => $batchId, 'tenant_id' => $tenantId, 'max_attempts' => self::MAX_ATTEMPTS]
         );
         $processed = 0;
@@ -180,8 +180,8 @@ final class BulkImportEngine
             return null;
         }
         $batch['rows'] = $this->db->fetchAll(
-            "SELECT row_number, status, attempts, certificate_id, error_message
-             FROM {$rowTable} WHERE batch_id = :batch_id AND tenant_id = :tenant_id ORDER BY row_number",
+            "SELECT `row_number`, status, attempts, certificate_id, error_message
+             FROM {$rowTable} WHERE batch_id = :batch_id AND tenant_id = :tenant_id ORDER BY `row_number`",
             ['batch_id' => $batchId, 'tenant_id' => $this->tenantContext->getTenantId()]
         );
         return $batch;

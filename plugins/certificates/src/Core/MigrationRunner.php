@@ -140,6 +140,7 @@ class MigrationRunner
                 $stmt = str_replace('INT AUTO_INCREMENT PRIMARY KEY', 'INTEGER PRIMARY KEY AUTOINCREMENT', $stmt);
                 $stmt = str_replace('TINYINT(1)', 'INTEGER', $stmt);
                 $stmt = str_replace('LONGTEXT', 'TEXT', $stmt);
+                $stmt = str_replace('ADD COLUMN IF NOT EXISTS', 'ADD COLUMN', $stmt);
                 // Strip standalone MySQL KEY indexes from CREATE TABLE syntax
                 $stmt = preg_replace('/,\s*KEY\s+[a-z0-9_]+\s*\([^)]+\)/i', '', $stmt);
                 $stmt = preg_replace('/,\s*UNIQUE KEY\s+[a-z0-9_]+\s*\(([^)]+)\)/i', ', UNIQUE($1)', $stmt);

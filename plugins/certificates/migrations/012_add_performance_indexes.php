@@ -61,7 +61,7 @@ return function (Database $db): void {
         [
             'table' => 'cert_bulk_rows',
             'name' => 'idx_perf_bulk_rows_chunk',
-            'columns' => ['batch_id', 'status', 'row_number'],
+            'columns' => ['batch_id', 'status', '`row_number`'],
         ],
         [
             'table' => 'cert_webhook_deliveries',

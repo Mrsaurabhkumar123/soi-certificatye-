@@ -1,6 +1,6 @@
-ALTER TABLE cert_forms ADD COLUMN field_schema_json TEXT NOT NULL DEFAULT '{}';
-ALTER TABLE cert_forms ADD COLUMN issue_mode VARCHAR(32) NOT NULL DEFAULT 'approval';
-ALTER TABLE cert_forms ADD COLUMN updated_at DATETIME NULL;
+ALTER TABLE cert_forms ADD COLUMN IF NOT EXISTS field_schema_json TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE cert_forms ADD COLUMN IF NOT EXISTS issue_mode VARCHAR(32) NOT NULL DEFAULT 'approval';
+ALTER TABLE cert_forms ADD COLUMN IF NOT EXISTS updated_at DATETIME NULL;
 
 CREATE TABLE IF NOT EXISTS cert_bulk_batches (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS cert_bulk_rows (
     id INT AUTO_INCREMENT PRIMARY KEY,
     batch_id INT NOT NULL,
     tenant_id INT NOT NULL,
-    row_number INT NOT NULL,
+    `row_number` INT NOT NULL,
     payload_json TEXT NOT NULL,
     status VARCHAR(32) NOT NULL DEFAULT 'pending',
     attempts INT NOT NULL DEFAULT 0,
@@ -29,6 +29,6 @@ CREATE TABLE IF NOT EXISTS cert_bulk_rows (
     processing_at DATETIME NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_bulk_batch_row (batch_id, row_number),
-    KEY idx_bulk_row_work (tenant_id, batch_id, status, row_number)
+    UNIQUE KEY uq_bulk_batch_row (batch_id, `row_number`),
+    KEY idx_bulk_row_work (tenant_id, batch_id, status, `row_number`)
 );
