@@ -146,7 +146,19 @@ class MigrationRunner
                 $stmt = preg_replace('/,\s*UNIQUE KEY\s+[a-z0-9_]+\s*\(([^)]+)\)/i', ', UNIQUE($1)', $stmt);
             }
 
-            $this->db->getPdo()->exec($stmt);
+            try {
+                $this->db->getPdo()->exec($stmt);
+            } catch (\PDOException $e) {
+                $msg = $e->getMessage();
+                if (str_contains($msg, 'already exists')
+                    || str_contains($msg, 'Duplicate column')
+                    || str_contains($msg, 'Duplicate key')
+                    || str_contains($msg, 'Duplicate entry')) {
+                    // Idempotent migration statement, safe to continue
+                } else {
+                    throw $e;
+                }
+            }
         }
     }
 }

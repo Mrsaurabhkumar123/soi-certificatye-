@@ -34,14 +34,46 @@ class Database
         // 1. If running inside host CMS, reuse host CMS PDO connection
         if (class_exists('\SOI\Core\Database')) {
             try {
-                $cmsPdo = \SOI\Core\Database::getPdo();
-                if ($cmsPdo instanceof PDO) {
-                    $prefix = defined('SOI_DB_PREFIX') ? (string)SOI_DB_PREFIX : (getenv('DB_PREFIX') ?: 'soi_');
-                    return new self($cmsPdo, $prefix);
+                if (method_exists('\SOI\Core\Database', 'pdo')) {
+                    $cmsPdo = \SOI\Core\Database::pdo();
+                } elseif (method_exists('\SOI\Core\Database', 'getPdo')) {
+                    $cmsPdo = \SOI\Core\Database::getPdo();
                 }
             } catch (\Throwable) {
-                // fall through
+                // Try connecting if host CMS config constants are present
+                if (defined('SOI_DB_HOST') && defined('SOI_DB_NAME') && defined('SOI_DB_USER')) {
+                    try {
+                        \SOI\Core\Database::connect([
+                            'host'   => SOI_DB_HOST,
+                            'name'   => SOI_DB_NAME,
+                            'user'   => SOI_DB_USER,
+                            'pass'   => defined('SOI_DB_PASS') ? SOI_DB_PASS : '',
+                            'port'   => defined('SOI_DB_PORT') ? SOI_DB_PORT : 3306,
+                            'prefix' => defined('SOI_DB_PREFIX') ? SOI_DB_PREFIX : 'soi_',
+                        ]);
+                        $cmsPdo = \SOI\Core\Database::pdo();
+                    } catch (\Throwable) {}
+                }
             }
+            if (isset($cmsPdo) && $cmsPdo instanceof PDO) {
+                $prefix = defined('SOI_DB_PREFIX') ? (string)SOI_DB_PREFIX : (getenv('DB_PREFIX') ?: 'soi_');
+                return new self($cmsPdo, $prefix);
+            }
+        }
+
+        // 2. Direct connection using CMS configuration constants if available
+        if (defined('SOI_DB_HOST') && defined('SOI_DB_NAME') && defined('SOI_DB_USER')) {
+            try {
+                $port = defined('SOI_DB_PORT') ? (int)SOI_DB_PORT : 3306;
+                $dsn = "mysql:host=" . SOI_DB_HOST . ";dbname=" . SOI_DB_NAME . ";charset=utf8mb4;port={$port}";
+                $pdo = new PDO($dsn, SOI_DB_USER, defined('SOI_DB_PASS') ? (string)SOI_DB_PASS : '', [
+                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                    PDO::ATTR_EMULATE_PREPARES => false,
+                ]);
+                $prefix = defined('SOI_DB_PREFIX') ? (string)SOI_DB_PREFIX : 'soi_';
+                return new self($pdo, $prefix);
+            } catch (\Throwable) {}
         }
 
         // Check for environment MySQL config, otherwise use persistent SQLite in storage/data

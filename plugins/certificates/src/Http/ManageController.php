@@ -19,6 +19,22 @@ class ManageController
     public function index(): void
     {
         $tenant = $this->plugin->tenantContext->getTenant();
+        if ($tenant === null) {
+            $defaultTenant = $this->plugin->tenantRepo->findFirstActive() ?? $this->plugin->initDefaultTenant();
+            if ($defaultTenant !== null) {
+                $userId = $this->plugin->tenantContext->getUserId() ?? 1;
+                $this->plugin->tenantRepo->addMembership($defaultTenant->id, $userId, 'tenant_owner');
+                $this->plugin->tenantContext->setTenant($defaultTenant, 'tenant_owner', $userId);
+                $tenant = $defaultTenant;
+            }
+        }
+
+        if ($tenant === null) {
+            http_response_code(403);
+            echo 'Access denied: No active tenant context found.';
+            return;
+        }
+
         $templates = $this->plugin->templateService->getTenantTemplates();
         $categories = $this->plugin->templateService->getCategories();
         $recentTemplates = $this->plugin->templateService->getRecentTemplates(6);

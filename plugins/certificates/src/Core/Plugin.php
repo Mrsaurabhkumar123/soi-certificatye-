@@ -92,39 +92,49 @@ class Plugin
             $this->migrationRunner->runPending();
         }
 
-        // 3. Resolve identity from the CMS integration. Standalone access is development-only.
+        // 3. Resolve identity from the CMS integration.
         $this->themeManager = new TenantThemeManager();
         $this->tenantRepo = new TenantRepository($this->db, $this->themeManager);
         $identity = CmsIdentity::current();
         $standaloneDemo = getenv('SOI_CERT_ENV') === 'development'
             && getenv('SOI_CERT_STANDALONE_DEMO') === '1';
-        if ($standaloneDemo) {
-            $this->initDefaultTenant();
-            $demoTenant = $this->tenantRepo->findBySlug('school-of-interns');
-            if ($demoTenant !== null) {
-                $this->tenantRepo->addMembership($demoTenant->id, 1, 'tenant_owner');
-            }
-        }
+
+        // Ensure baseline default organization tenant exists
+        $defaultTenant = $this->tenantRepo->findFirstActive() ?? $this->initDefaultTenant();
 
         $this->tenantContext = new TenantContext(null, $identity->userId, 'viewer');
-        $this->authorizer = new Authorizer($this->tenantContext, $identity->isPlatformAdmin);
-        if ($standaloneDemo) {
-            $this->authorizer = new Authorizer($this->tenantContext, true);
-        }
+        $this->authorizer = new Authorizer($this->tenantContext, $identity->isPlatformAdmin || $standaloneDemo);
+
         $activeTenantId = $identity->activeTenantId;
-        if ($standaloneDemo && $activeTenantId === null) {
-            $activeTenantId = $this->tenantRepo->findBySlug('school-of-interns')?->id;
-        }
-        if ($identity->userId !== null && $activeTenantId !== null) {
-            $membership = $this->tenantRepo->resolveMembership($activeTenantId, $identity->userId);
-            if ($membership !== null) {
-                $this->tenantContext->setTenant(new \SOI\Certificates\Tenancy\Tenant($membership), $membership['role_key'], $identity->userId);
-            } elseif ($identity->isPlatformAdmin) {
-                $tenant = $this->tenantRepo->findById($activeTenantId);
-                if ($tenant !== null && $tenant->isActive()) {
-                    $this->tenantContext->setTenant($tenant, 'platform_super_admin', $identity->userId);
+
+        // Resolve active tenant for authenticated user
+        if ($identity->userId !== null) {
+            if ($activeTenantId === null) {
+                // Check if user has active memberships
+                $userMemberships = $this->tenantRepo->listTenantsForUser($identity->userId);
+                if (!empty($userMemberships)) {
+                    $activeTenantId = (int)$userMemberships[0]['id'];
+                } elseif ($identity->isPlatformAdmin || $standaloneDemo) {
+                    // Admin user without explicit membership: enroll as tenant_owner on default tenant
+                    $this->tenantRepo->addMembership($defaultTenant->id, $identity->userId, 'tenant_owner');
+                    $activeTenantId = $defaultTenant->id;
                 }
             }
+
+            if ($activeTenantId !== null) {
+                $membership = $this->tenantRepo->resolveMembership($activeTenantId, $identity->userId);
+                if ($membership !== null) {
+                    $this->tenantContext->setTenant(new \SOI\Certificates\Tenancy\Tenant($membership), $membership['role_key'], $identity->userId);
+                } elseif ($identity->isPlatformAdmin || $standaloneDemo) {
+                    $tenant = $this->tenantRepo->findById($activeTenantId);
+                    if ($tenant !== null && $tenant->isActive()) {
+                        $this->tenantContext->setTenant($tenant, 'platform_super_admin', $identity->userId);
+                    }
+                }
+            }
+        } elseif ($standaloneDemo) {
+            $this->tenantRepo->addMembership($defaultTenant->id, 1, 'tenant_owner');
+            $this->tenantContext->setTenant($defaultTenant, 'platform_super_admin', 1);
         }
 
         // 4. Core Services
@@ -132,7 +142,7 @@ class Plugin
         $this->assetUploader = new AssetUploader($this->db, $this->storage);
         $this->webhookService = new WebhookService($this->db);
         $this->templateService = new TemplateService($this->db, $this->tenantContext);
-        if ($standaloneDemo && $this->tenantContext->hasTenant()) {
+        if ($this->tenantContext->hasTenant()) {
             $this->initDefaultTemplate();
         }
 
@@ -205,19 +215,39 @@ class Plugin
         return $this->apiClientContext;
     }
 
-    protected function initDefaultTenant(): void
+    public function initDefaultTenant(): \SOI\Certificates\Tenancy\Tenant
     {
-        if (!$this->tenantRepo->findBySlug('school-of-interns')) {
-            $this->tenantRepo->create(
-                'school-of-interns',
-                'School Of Interns (SOI)',
-                ['primary_color' => '#1e3a8a', 'logo' => 'soi_logo.png']
-            );
+        $existing = $this->tenantRepo->findBySlug('school-of-interns');
+        if ($existing !== null) {
+            return $existing;
         }
+        $first = $this->tenantRepo->findFirstActive();
+        if ($first !== null) {
+            return $first;
+        }
+
+        $siteName = 'School Of Interns (SOI)';
+        if (class_exists('\SOI\Core\Database') && method_exists('\SOI\Core\Database', 'getOption')) {
+            try {
+                $opt = \SOI\Core\Database::getOption('site_name');
+                if (!empty($opt) && is_string($opt)) {
+                    $siteName = $opt;
+                }
+            } catch (\Throwable) {}
+        }
+
+        return $this->tenantRepo->create(
+            'school-of-interns',
+            $siteName,
+            ['primary_color' => '#1e3a8a', 'logo' => 'soi_logo.png']
+        );
     }
 
-    protected function initDefaultTemplate(): void
+    public function initDefaultTemplate(): void
     {
+        if (!$this->tenantContext->hasTenant()) {
+            return;
+        }
         $templates = $this->templateService->getTenantTemplates();
         if (empty($templates)) {
             $tpl = $this->templateService->createTemplate('leadership-excellence', 'Leadership Excellence Award', 'Leadership');

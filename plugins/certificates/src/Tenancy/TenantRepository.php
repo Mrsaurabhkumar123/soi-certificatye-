@@ -41,6 +41,30 @@ class TenantRepository
         return array_map(fn($r) => new Tenant($r), $rows);
     }
 
+    public function findFirstActive(): ?Tenant
+    {
+        $table = $this->db->tableName('cert_tenants');
+        $row = $this->db->fetchOne("SELECT * FROM {$table} WHERE status = 'active' ORDER BY id ASC LIMIT 1");
+        return $row ? new Tenant($row) : null;
+    }
+
+    public function listTenantsForUser(int $userId): array
+    {
+        if ($userId < 1) {
+            return [];
+        }
+        $memberships = $this->db->tableName('cert_memberships');
+        $tenants = $this->db->tableName('cert_tenants');
+        return $this->db->fetchAll(
+            "SELECT t.*, m.role_key
+             FROM {$tenants} t
+             JOIN {$memberships} m ON m.tenant_id = t.id
+             WHERE m.user_id = :user_id AND m.status = 'active' AND t.status = 'active'
+             ORDER BY t.id ASC",
+            ['user_id' => $userId]
+        );
+    }
+
     public function create(string $slug, string $displayName, array $branding = []): Tenant
     {
         $slug = strtolower(trim($slug));
