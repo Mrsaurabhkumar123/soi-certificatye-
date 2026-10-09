@@ -153,12 +153,25 @@ class SimpleZipWriter
 
 $packager = new SimpleZipWriter($zipPath);
 
+// Add root manifest.json for direct CMS update uploader compatibility
+$rootManifestData = [
+    'version' => $version,
+    'name' => 'SOI Certificate Management Platform',
+    'type' => 'plugin',
+    'min_php' => '8.0',
+    'description' => 'Enterprise-grade, modular, multi-tenant certificate issuance, verification, and management platform for SOI CMS.',
+];
+$rootManifestJson = json_encode($rootManifestData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+$manifestTmp = sys_get_temp_dir() . '/soi_root_manifest_' . time() . '.json';
+file_put_contents($manifestTmp, $rootManifestJson);
+$packager->addFile($manifestTmp, 'manifest.json');
+
 $files = new RecursiveIteratorIterator(
     new RecursiveDirectoryIterator($pluginDir, RecursiveDirectoryIterator::SKIP_DOTS),
     RecursiveIteratorIterator::LEAVES_ONLY
 );
 
-$count = 0;
+$count = 1;
 foreach ($files as $name => $file) {
     if (!$file->isDir()) {
         $filePath = $file->getRealPath();
@@ -173,12 +186,16 @@ foreach ($files as $name => $file) {
             continue;
         }
 
+        // Package under plugins/certificates/ for seamless CMS extraction
+        $packager->addFile($filePath, 'plugins/certificates/' . $relativePath);
+        // Also package under certificates/ for backward compatibility
         $packager->addFile($filePath, 'certificates/' . $relativePath);
         $count++;
     }
 }
 
 $packager->close();
+@unlink($manifestTmp);
 
 // Also copy to root for immediate accessibility
 copy($zipPath, $rootZipPath);
