@@ -455,8 +455,8 @@ class Plugin
         $r->get('/api/v1/verification/{token}', [$moduleApi, 'verify']);
     }
 
-    public function handleRequest(): void
+    public function handleRequest(?string $method = null, ?string $uri = null): void
     {
-        $this->router->dispatch();
+        $this->router->dispatch($method, $uri);
     }
 }

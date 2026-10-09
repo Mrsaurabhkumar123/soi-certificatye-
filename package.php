@@ -206,6 +206,24 @@ foreach ($files as $name => $file) {
     }
 }
 
+// Add LiteSpeed direct entrypoints, admin bridge, and root .htaccess
+$bridges = [
+    'admin/certificates.php' => __DIR__ . '/admin/certificates.php',
+    'manage/index.php' => __DIR__ . '/manage/index.php',
+    'console/index.php' => __DIR__ . '/console/index.php',
+    'verify/index.php' => __DIR__ . '/verify/index.php',
+    'forms/index.php' => __DIR__ . '/forms/index.php',
+    'docs/index.php' => __DIR__ . '/docs/index.php',
+    'super-admin/index.php' => __DIR__ . '/super-admin/index.php',
+    '.htaccess' => __DIR__ . '/.htaccess',
+];
+foreach ($bridges as $entryName => $filePath) {
+    if (file_exists($filePath)) {
+        $packager->addFile($filePath, $entryName);
+        $count++;
+    }
+}
+
 $packager->close();
 @unlink($manifestTmp);
 @unlink($sqlTmp);

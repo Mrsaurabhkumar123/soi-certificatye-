@@ -19,7 +19,9 @@ if (!defined('SOI_CERTIFICATES_LOADED')) {
 
     // Register into Host CMS Admin Menu if running inside SOI Source CMS
     if (class_exists('\SOI\Core\Plugin') && method_exists('\SOI\Core\Plugin', 'addAdminMenu')) {
-        $manageUrl = defined('SOI_HOME_URL') ? rtrim(SOI_HOME_URL, '/') . '/manage' : '/manage';
+        $manageUrl = defined('SOI_ADMIN_URL')
+            ? rtrim(SOI_ADMIN_URL, '/') . '/certificates.php'
+            : (defined('SOI_HOME_URL') ? rtrim(SOI_HOME_URL, '/') . '/manage' : '/manage');
         \SOI\Core\Plugin::addAdminMenu(
             title:    'Certificates',
             slug:     'certificates',
