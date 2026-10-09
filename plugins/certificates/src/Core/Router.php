@@ -86,8 +86,10 @@ class Router
             }
         }
 
+        $lookupMethod = $method === 'HEAD' ? 'GET' : $method;
+
         foreach ($this->routes as $route) {
-            if ($route['method'] !== $method) {
+            if ($route['method'] !== $lookupMethod) {
                 continue;
             }
 

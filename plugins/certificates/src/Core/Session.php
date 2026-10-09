@@ -10,7 +10,7 @@ class Session
 {
     public static function start(): void
     {
-        if (session_status() === PHP_SESSION_NONE) {
+        if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
             session_start([
                 'cookie_httponly' => true,
                 'cookie_samesite' => 'Lax',
