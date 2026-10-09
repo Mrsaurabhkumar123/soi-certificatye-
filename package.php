@@ -166,12 +166,24 @@ $manifestTmp = sys_get_temp_dir() . '/soi_root_manifest_' . time() . '.json';
 file_put_contents($manifestTmp, $rootManifestJson);
 $packager->addFile($manifestTmp, 'manifest.json');
 
+// Add root update.sql for automatic database schema provisioning on CMS update
+$sqlMigrations = glob($pluginDir . '/migrations/*.sql');
+sort($sqlMigrations);
+$combinedSql = "-- SOI Certificate Management Platform Database Schema\n";
+foreach ($sqlMigrations as $sqlFile) {
+    $combinedSql .= "\n-- Migration: " . basename($sqlFile) . "\n";
+    $combinedSql .= file_get_contents($sqlFile) . "\n";
+}
+$sqlTmp = sys_get_temp_dir() . '/soi_root_update_' . time() . '.sql';
+file_put_contents($sqlTmp, $combinedSql);
+$packager->addFile($sqlTmp, 'update.sql');
+
 $files = new RecursiveIteratorIterator(
     new RecursiveDirectoryIterator($pluginDir, RecursiveDirectoryIterator::SKIP_DOTS),
     RecursiveIteratorIterator::LEAVES_ONLY
 );
 
-$count = 1;
+$count = 2;
 foreach ($files as $name => $file) {
     if (!$file->isDir()) {
         $filePath = $file->getRealPath();
@@ -196,6 +208,7 @@ foreach ($files as $name => $file) {
 
 $packager->close();
 @unlink($manifestTmp);
+@unlink($sqlTmp);
 
 // Also copy to root for immediate accessibility
 copy($zipPath, $rootZipPath);

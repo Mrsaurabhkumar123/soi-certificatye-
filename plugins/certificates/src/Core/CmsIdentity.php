@@ -52,6 +52,12 @@ final class CmsIdentity
             return new self($userId === null ? null : (int)$userId, $isPlatformAdmin, $tenantId === null ? null : (int)$tenantId);
         }
 
+        if (class_exists('\SOI\Core\Auth') && \SOI\Core\Auth::check()) {
+            $uid = \SOI\Core\Auth::id();
+            $isAdmin = \SOI\Core\Auth::role() === 'admin';
+            return new self($uid, $isAdmin, null);
+        }
+
         if (getenv('SOI_CERT_ENV') === 'development' && getenv('SOI_CERT_STANDALONE_DEMO') === '1') {
             return new self(1, true, null);
         }

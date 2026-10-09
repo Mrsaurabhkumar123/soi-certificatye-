@@ -31,6 +31,19 @@ class Database
 
     public static function createDefault(string $storagePath = ''): self
     {
+        // 1. If running inside host CMS, reuse host CMS PDO connection
+        if (class_exists('\SOI\Core\Database')) {
+            try {
+                $cmsPdo = \SOI\Core\Database::getPdo();
+                if ($cmsPdo instanceof PDO) {
+                    $prefix = defined('SOI_DB_PREFIX') ? (string)SOI_DB_PREFIX : (getenv('DB_PREFIX') ?: 'soi_');
+                    return new self($cmsPdo, $prefix);
+                }
+            } catch (\Throwable) {
+                // fall through
+            }
+        }
+
         // Check for environment MySQL config, otherwise use persistent SQLite in storage/data
         $host = getenv('DB_HOST') ?: '';
         $dbname = getenv('DB_NAME') ?: '';

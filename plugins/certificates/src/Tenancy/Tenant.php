@@ -36,4 +36,21 @@ class Tenant
     {
         return $this->status === 'suspended';
     }
+
+    public function isArchived(): bool
+    {
+        return $this->status === 'archived';
+    }
+
+    public function toArray(): array
+    {
+        return [
+            'id' => $this->id,
+            'slug' => $this->slug,
+            'display_name' => $this->displayName,
+            'status' => $this->status,
+            'branding' => $this->branding,
+            'created_at' => $this->createdAt,
+        ];
+    }
 }
