@@ -1,5 +1,9 @@
 <?php
 declare(strict_types=1);
+$plugin = isset($this) && isset($this->plugin) ? $this->plugin : \SOI\Certificates\Core\Plugin::getInstance();
+$assetCssUrl = $plugin ? $plugin->assetUrl('/css/style.css') : '/assets/css/style.css';
+$baseDir = $plugin ? $plugin->baseDir : dirname(__DIR__, 2);
+$cssFile = $baseDir . '/assets/css/style.css';
 ?>
 <!doctype html>
 <html lang="en">
@@ -7,7 +11,10 @@ declare(strict_types=1);
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title><?= htmlspecialchars($form['title'], ENT_QUOTES, 'UTF-8') ?> - <?= htmlspecialchars($form['tenant_name'], ENT_QUOTES, 'UTF-8') ?></title>
-  <link rel="stylesheet" href="/assets/css/style.css">
+  <link rel="stylesheet" href="<?= htmlspecialchars($assetCssUrl) ?>">
+  <?php if (file_exists($cssFile)): ?>
+    <style><?= file_get_contents($cssFile) ?></style>
+  <?php endif; ?>
 </head>
 <body>
   <main class="container" style="max-width:760px;margin:2rem auto;">

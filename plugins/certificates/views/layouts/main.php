@@ -7,6 +7,9 @@ $tenant = $this->plugin->tenantContext->getTenant();
 $themeCss = ($tenant && isset($this->plugin->themeManager))
     ? $this->plugin->themeManager->getThemeCss($tenant)
     : '';
+$cssPath = $this->plugin->baseDir . '/assets/css/style.css';
+$inlinedCss = file_exists($cssPath) ? (string)file_get_contents($cssPath) : '';
+$assetCssUrl = $this->plugin->assetUrl('/css/style.css');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -14,9 +17,12 @@ $themeCss = ($tenant && isset($this->plugin->themeManager))
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?= htmlspecialchars($pageTitle ?? 'SOI Certificate Platform') ?></title>
-  <link rel="stylesheet" href="<?= htmlspecialchars($router->url('/assets/css/style.css')) ?>">
+  <link rel="stylesheet" href="<?= htmlspecialchars($assetCssUrl) ?>">
+  <?php if ($inlinedCss !== ''): ?>
+    <style id="soi-cert-core-css"><?= $inlinedCss ?></style>
+  <?php endif; ?>
   <?php if ($themeCss !== ''): ?>
-    <style><?= $themeCss ?></style>
+    <style id="soi-cert-tenant-css"><?= $themeCss ?></style>
   <?php endif; ?>
 </head>
 <body class="has-sidebar">

@@ -3,15 +3,10 @@ declare(strict_types=1);
 
 use SOI\Certificates\Core\Session;
 
-/**
- * Public/Private Form Submission View
- * Renders the applicant submission interface based on dynamic form schema.
- *
- * @var array $form Form definition
- * @var array $fields Form fields schema
- * @var string $actionUrl Submission endpoint
- * @var string $csrfField Rendered CSRF hidden field
- */
+$plugin = isset($this) && isset($this->plugin) ? $this->plugin : \SOI\Certificates\Core\Plugin::getInstance();
+$assetCssUrl = $plugin ? $plugin->assetUrl('/css/style.css') : '/assets/css/style.css';
+$baseDir = $plugin ? $plugin->baseDir : dirname(__DIR__, 3);
+$cssFile = $baseDir . '/assets/css/style.css';
 ?>
 <!doctype html>
 <html lang="en">
@@ -19,7 +14,10 @@ use SOI\Certificates\Core\Session;
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title><?= htmlspecialchars($form['title'] ?? 'Certificate Request', ENT_QUOTES, 'UTF-8') ?> - <?= htmlspecialchars($form['tenant_name'] ?? 'SOI Platform', ENT_QUOTES, 'UTF-8') ?></title>
-  <link rel="stylesheet" href="/assets/css/style.css">
+  <link rel="stylesheet" href="<?= htmlspecialchars($assetCssUrl) ?>">
+  <?php if (file_exists($cssFile)): ?>
+    <style><?= file_get_contents($cssFile) ?></style>
+  <?php endif; ?>
   <style>
     body {
       background: var(--bg-main, #f8fafc);

@@ -18,7 +18,7 @@ ob_start();
 <?php endif; ?>
 
 <?php if ($canManageForms && $publishedTemplates !== []): ?>
-  <script src="<?= htmlspecialchars($this->plugin->router->url('/assets/js/form-builder.js'), ENT_QUOTES, 'UTF-8') ?>" defer></script>
+  <script src="<?= htmlspecialchars($this->plugin->assetUrl('/js/form-builder.js'), ENT_QUOTES, 'UTF-8') ?>" defer></script>
 <?php endif; ?>
 
 <!-- Bulk Certificate Import Wizard -->

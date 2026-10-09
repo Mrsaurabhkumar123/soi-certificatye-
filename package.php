@@ -202,6 +202,10 @@ foreach ($files as $name => $file) {
         $packager->addFile($filePath, 'plugins/certificates/' . $relativePath);
         // Also package under certificates/ for backward compatibility
         $packager->addFile($filePath, 'certificates/' . $relativePath);
+        // If an asset, also place at root assets/ for direct /assets/... web access
+        if (str_starts_with($relativePath, 'assets/')) {
+            $packager->addFile($filePath, $relativePath);
+        }
         $count++;
     }
 }

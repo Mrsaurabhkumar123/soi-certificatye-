@@ -215,6 +215,18 @@ class Plugin
         return $this->apiClientContext;
     }
 
+    public function assetUrl(string $path): string
+    {
+        $cleanPath = '/' . ltrim($path, '/');
+        if (defined('SOI_ADMIN_URL')) {
+            return rtrim(SOI_ADMIN_URL, '/') . '/certificates.php?asset=' . ltrim($cleanPath, '/');
+        }
+        if (defined('SOI_HOME_URL')) {
+            return rtrim(SOI_HOME_URL, '/') . '/plugins/certificates/assets' . $cleanPath;
+        }
+        return $this->router->url('/assets' . $cleanPath);
+    }
+
     public function initDefaultTenant(): \SOI\Certificates\Tenancy\Tenant
     {
         $existing = $this->tenantRepo->findBySlug('school-of-interns');

@@ -87,4 +87,4 @@ $initialJson = json_encode(
     </aside>
   </div>
 </main>
-<script src="<?= htmlspecialchars($this->plugin->router->url('/assets/js/designer-canvas.js'), ENT_QUOTES, 'UTF-8') ?>" defer></script>
+<script src="<?= htmlspecialchars($this->plugin->assetUrl('/js/designer-canvas.js'), ENT_QUOTES, 'UTF-8') ?>" defer></script>

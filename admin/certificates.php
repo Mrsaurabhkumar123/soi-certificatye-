@@ -9,6 +9,33 @@ if (!defined('SOI_ROOT')) {
     define('SOI_ROOT', dirname(__DIR__));
 }
 
+// Directly serve static plugin assets (CSS, JS, images, fonts)
+if (isset($_GET['asset'])) {
+    $asset = trim((string)$_GET['asset'], "/\\");
+    $asset = str_replace(['..', "\0"], '', $asset);
+    $assetFile = SOI_ROOT . '/plugins/certificates/assets/' . $asset;
+    if (file_exists($assetFile) && is_file($assetFile)) {
+        $ext = strtolower(pathinfo($assetFile, PATHINFO_EXTENSION));
+        $mimes = [
+            'css'   => 'text/css; charset=utf-8',
+            'js'    => 'application/javascript; charset=utf-8',
+            'svg'   => 'image/svg+xml',
+            'png'   => 'image/png',
+            'jpg'   => 'image/jpeg',
+            'jpeg'  => 'image/jpeg',
+            'woff'  => 'font/woff',
+            'woff2' => 'font/woff2',
+            'ttf'   => 'font/ttf',
+        ];
+        header('Content-Type: ' . ($mimes[$ext] ?? 'application/octet-stream'));
+        header('Cache-Control: public, max-age=604800');
+        readfile($assetFile);
+        exit;
+    }
+    http_response_code(404);
+    die('Asset not found');
+}
+
 require_once SOI_ROOT . '/config/config.php';
 require_once SOI_ROOT . '/core/helpers.php';
 

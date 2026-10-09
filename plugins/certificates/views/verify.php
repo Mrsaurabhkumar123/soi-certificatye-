@@ -1,6 +1,10 @@
 <?php
 declare(strict_types=1);
 /** @var \SOI\Certificates\Verification\VerificationResult $result */
+$plugin = isset($this) && isset($this->plugin) ? $this->plugin : \SOI\Certificates\Core\Plugin::getInstance();
+$assetCssUrl = $plugin ? $plugin->assetUrl('/css/style.css') : '/assets/css/style.css';
+$baseDir = $plugin ? $plugin->baseDir : dirname(__DIR__);
+$cssFile = $baseDir . '/assets/css/style.css';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -9,7 +13,10 @@ declare(strict_types=1);
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
   <title>Certificate Verification - <?= htmlspecialchars($result->certificateNumber ?? 'Official Registry') ?></title>
-  <link rel="stylesheet" href="<?= htmlspecialchars($this->plugin->router->url('/assets/css/style.css')) ?>">
+  <link rel="stylesheet" href="<?= htmlspecialchars($assetCssUrl) ?>">
+  <?php if (file_exists($cssFile)): ?>
+    <style><?= file_get_contents($cssFile) ?></style>
+  <?php endif; ?>
 </head>
 <body style="background-color: #f1f5f9;">
 
